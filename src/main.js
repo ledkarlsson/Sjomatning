@@ -4,6 +4,7 @@ const crypto = require('node:crypto')
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel } = require('./roxen-level')
+const packageMetadata = require('../package.json')
 
 // Chromium-cachen hålls åtskild från appens beständiga data. Det undviker
 // låsta Cache/GPUCache-mappar vid uppdatering och snabb omstart på Windows.
@@ -26,7 +27,7 @@ function createWindow() {
     minWidth: 1050,
     minHeight: 680,
     backgroundColor: '#eef3f1',
-    title: 'Sjömätning',
+    title: `Sjömätning ${app.getVersion()} · byggd ${packageMetadata.buildDate}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -134,6 +135,8 @@ ipcMain.handle('roxen:water-level', async (_event, date) => {
     return { ok: false, message: `Vattenståndet kunde inte hämtas: ${error.message}` }
   }
 })
+
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), buildDate: packageMetadata.buildDate }))
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return

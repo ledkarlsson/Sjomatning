@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('sjomatning', {
   scanDroppedEntries: files => ipcRenderer.invoke('files:scan-paths', files.map(file => webUtils.getPathForFile(file))),
   launchPdf: () => ipcRenderer.invoke('files:launch-pdf'),
   getRoxenWaterLevel: date => ipcRenderer.invoke('roxen:water-level', date),
+  getAppInfo: () => ipcRenderer.invoke('app:info'),
   onUpdaterStatus: callback => ipcRenderer.on('updater:status', (_event, status) => callback(status)),
   installUpdate: () => ipcRenderer.invoke('updater:install')
 })

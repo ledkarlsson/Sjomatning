@@ -29,6 +29,9 @@ jobs:
         run: |
           $version = "0.2.${{ github.run_number }}"
           npm version $version --no-git-tag-version
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $package.buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+          $package | ConvertTo-Json -Depth 20 | Set-Content package.json -Encoding utf8
           "BUILD_VERSION=$version" >> $env:GITHUB_ENV
       - name: Testa
         run: npm test

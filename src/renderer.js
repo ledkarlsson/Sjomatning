@@ -545,6 +545,12 @@ window.sjomatning.launchPdf().then(file => {
 
 $('waterLevelDate').value = new Date().toLocaleDateString('sv-SE')
 
+window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
+  const title = `Sjömätning ${version} · byggd ${buildDate}`
+  document.title = title
+  $('buildInfo').textContent = `v${version} · ${buildDate}`
+})
+
 window.sjomatning.onUpdaterStatus(({ status, detail }) => {
   const messages = {
     checking: 'Söker efter uppdateringar…', current: 'Programmet är uppdaterat.',

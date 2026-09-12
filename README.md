@@ -115,3 +115,5 @@ Flera mappar kan läggas till med filväljaren eller genom drag-and-drop. Identi
 Varje push till `main` får en unik version och publiceras automatiskt som en GitHub Release tillsammans med `latest.yml`. Installerade versioner hämtar uppdateringen i bakgrunden och visar en knapp för att starta om och installera när den är klar.
 
 Appen använder en separat Chromium-cache och tillåter bara en körande instans. Det förhindrar Windows-felet `Unable to move/create cache` vid snabb omstart och efter automatisk uppdatering.
+
+Versionsnummer och UTC-byggdatum visas i både fönstertiteln och apphuvudet. Releaseflödet stämplar båda värdena i paketet före Windows-bygget.
