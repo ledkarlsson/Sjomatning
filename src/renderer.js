@@ -1,6 +1,7 @@
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
 import { createWebMap, geoToMapPixel, mapPixelToGeo, tilesForMap } from './web-map.mjs'
+import { adjustedDepth, exportCsv, exportWaypoints, processedPoints, trackDate } from './track-processing.mjs'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
@@ -11,6 +12,7 @@ const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
 const wrap = $('canvasWrap')
 const viewportElement = $('viewport')
+const waterLevelRequests = new Map()
 
 function toast(message) {
   $('toast').textContent = message
@@ -294,16 +296,26 @@ function renderFolder() {
   $('folderPanel').classList.remove('hidden')
   $('folderName').textContent = `${folder.pdfs.length + folder.tracks.length} sparade filer`
   $('folderCount').textContent = `${folder.pdfs.length + folder.tracks.length} filer`
-  $('folderPdfList').innerHTML = folder.pdfs.length ? folder.pdfs.map((file, index) => `
+  const pdfCard = (file, index) => `
     <div class="folder-file-card">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.hasGeoData ? 'GeoPDF' : 'Utan geodata'}</i></span></div>
       <div class="file-actions"><button class="small-button" data-folder-pdf="${index}">Öppna</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort PDF">×</button></div>
-    </div>`).join('') : '<p class="empty-list">Inga PDF-filer hittades.</p>'
-  $('folderTrackList').innerHTML = folder.tracks.length ? folder.tracks.map((file, index) => `
+    </div>`
+  const pdfGroups = [
+    ['Med geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => item.file.hasGeoData)],
+    ['Utan geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => !item.file.hasGeoData)]
+  ].filter(([, items]) => items.length)
+  $('folderPdfList').innerHTML = pdfGroups.length ? pdfGroups.map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => pdfCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga PDF-filer hittades.</p>'
+  const trackCard = (file, index) => `
     <div class="folder-file-card ${file.error ? 'invalid' : ''}">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${file.parsed ? `${file.parsed.points.length.toLocaleString('sv-SE')} punkter · ${file.name.split('.').pop().toUpperCase()}<br><i class="file-state ${trackFit(file.parsed)?.inside ? 'geo' : ''}">${fitText(file.parsed)}</i>` : escapeHtml(file.error)}</span></div>
       <div class="file-actions"><button class="small-button" data-folder-track="${index}" ${file.error ? 'disabled' : ''}>${file.loaded ? 'Dölj' : 'Lägg till'}</button><button class="small-button danger" data-delete-track="${index}" title="Ta bort spårfil">×</button></div>
-    </div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
+    </div>`
+  const indexedTracks = folder.tracks.map((file, index) => ({ file, index, fits: (trackFit(file.parsed)?.inside || 0) > 0 }))
+  const trackGroups = state.transform
+    ? [['I aktuell karta', indexedTracks.filter(item => item.fits)], ['Övriga spår', indexedTracks.filter(item => !item.fits)]]
+    : [['Mätspår', indexedTracks]]
+  $('folderTrackList').innerHTML = indexedTracks.length ? trackGroups.filter(([, items]) => items.length).map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => trackCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
 
   document.querySelectorAll('[data-folder-pdf]').forEach(button => button.addEventListener('click', () => loadPdfFile(folder.pdfs[Number(button.dataset.folderPdf)])))
   document.querySelectorAll('[data-folder-track]').forEach(button => button.addEventListener('click', () => toggleFolderTrack(Number(button.dataset.folderTrack))))
@@ -335,7 +347,7 @@ async function deleteLibraryFile(type, index) {
   } catch (error) { toast(`Kunde inte ta bort filen: ${error.message}`) }
 }
 
-function toggleFolderTrack(index) {
+async function toggleFolderTrack(index) {
   const file = state.library.tracks[index]
   if (!file.parsed) return
   if (file.loaded) {
@@ -350,6 +362,7 @@ function toggleFolderTrack(index) {
     const parsed = { ...file.parsed, color: colors[state.logs.length % colors.length], visible: true, folderKey: file.path, sourceId: file.id }
     state.logs.push(parsed)
     file.loaded = true
+    await applyAutomaticWaterLevel(parsed)
   }
   renderFolder(); renderLogs(); drawOverlay()
 }
@@ -411,21 +424,22 @@ function drawOverlay() {
   })
 
   if (!state.transform) return
-  const allDepths = state.logs.flatMap(log => log.visible ? log.points.map(point => correctedDepth(log, point)) : [])
+  const allDepths = state.logs.flatMap(log => log.visible ? processedPoints(log).map(point => correctedDepth(log, point)) : [])
   const min = Math.min(...allDepths)
   const max = Math.max(...allDepths)
 
   state.logs.filter(log => log.visible).forEach(log => {
     context.beginPath()
     let started = false
-    log.points.forEach(point => {
+    const points = processedPoints(log)
+    points.forEach(point => {
       const pixel = geoToPixel(point.lat, point.lon)
       if (!pixel) return
       if (!started) { context.moveTo(pixel.x, pixel.y); started = true } else context.lineTo(pixel.x, pixel.y)
     })
     context.strokeStyle = log.color; context.globalAlpha = .72; context.lineWidth = 2.2; context.stroke(); context.globalAlpha = 1
-    const stride = Math.max(1, Math.ceil(log.points.length / 1100))
-    log.points.forEach((point, index) => {
+    const stride = Math.max(1, Math.ceil(points.length / 1100))
+    points.forEach((point, index) => {
       if (index % stride) return
       const pixel = geoToPixel(point.lat, point.lon)
       if (!pixel || pixel.x < 0 || pixel.x > state.width || pixel.y < 0 || pixel.y > state.height) return
@@ -436,7 +450,7 @@ function drawOverlay() {
 }
 
 function correctedDepth(log, point) {
-  return log.correction == null ? point.depth : point.depth - log.correction
+  return adjustedDepth(log, point)
 }
 
 async function openLogs() {
@@ -466,13 +480,28 @@ async function importTrackFiles(files) {
       parsed.color = colors[state.logs.length % colors.length]
       parsed.visible = true
       parsed.sourceId = id
+      parsed.depthAdjustment = 0
+      parsed.pruneDistance = 0
       state.logs.push(parsed)
+      await applyAutomaticWaterLevel(parsed)
       if (parsed.warnings.length) toast(`${file.name}: ${parsed.warnings.length} rader hoppades över.`)
     } catch (error) { toast(error.message) }
   }
   renderLogs()
   drawOverlay()
   if (duplicates) toast(`${duplicates} duplicerat spår hoppades över.`)
+}
+
+async function applyAutomaticWaterLevel(log) {
+  const date = trackDate(log)
+  if (!date) return false
+  if (!waterLevelRequests.has(date)) waterLevelRequests.set(date, window.sjomatning.getRoxenWaterLevel(date).catch(() => null))
+  const result = await waterLevelRequests.get(date)
+  if (!result?.ok) return false
+  log.waterLevel = result.data.level
+  log.waterLevelSource = 'roxen'
+  log.correction = Math.round((result.data.level - 33) * 100) / 100
+  return true
 }
 
 function renderLogs() {
@@ -483,18 +512,55 @@ function renderLogs() {
     $('logsMapSummary').textContent = `${fitting} av ${state.logs.length} spår har punkter som ryms i den aktiva kartan.`
   } else $('logsMapSummary').textContent = 'Aktivera geodata för att se vilka spår som ryms i kartan.'
   $('logList').innerHTML = state.logs.map((log, index) => {
-    const depths = log.points.map(point => correctedDepth(log, point))
+    const visiblePoints = processedPoints(log)
+    const depths = visiblePoints.map(point => correctedDepth(log, point))
     const source = log.waterLevelSource === 'roxen' ? ' · Roxen, Tekniska verken' : ''
-    const correction = log.correction == null ? 'Ingen vattenståndskorrigering' : `Vattenstånd ${log.waterLevel.toFixed(2)} m${source} · korrektion −${log.correction.toFixed(2)} m`
+    const correction = log.correction == null ? 'Ingen vattenståndskorrigering' : `Vattenstånd ${log.waterLevel.toFixed(2)} m${source} · korrektion ${(-log.correction).toFixed(2)} m`
+    const adjustment = log.depthAdjustment ? ` · extra justering ${log.depthAdjustment > 0 ? '+' : ''}${log.depthAdjustment.toFixed(2)} m` : ''
     return `<div class="log-card" style="--log-color:${log.color}">
       <label class="log-title"><input class="log-toggle" type="checkbox" data-log="${index}" ${log.visible ? 'checked' : ''}>${log.name}</label>
-      <div class="log-meta">${log.points.length.toLocaleString('sv-SE')} punkter · ${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m<br><strong class="track-fit">${fitText(log)}</strong><br>${correction}</div>
+      <div class="log-meta">${visiblePoints.length.toLocaleString('sv-SE')} av ${log.points.length.toLocaleString('sv-SE')} punkter · ${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m<br><strong class="track-fit">${fitText(log)}</strong><br>${correction}${adjustment}</div>
+      <div class="log-controls">
+        <label>Vattennivå (m)<input type="number" step="0.01" data-water-level="${index}" value="${log.waterLevel == null ? '' : log.waterLevel.toFixed(2)}" placeholder="33.00"></label>
+        <label>Djupjustering (m)<input type="number" step="0.01" data-depth-adjustment="${index}" value="${(log.depthAdjustment || 0).toFixed(2)}"></label>
+        <label>Glesa, avstånd (m)<input type="number" min="0" max="500" step="1" data-prune-distance="${index}" value="${log.pruneDistance || 0}"></label>
+      </div>
     </div>`
   }).join('')
   document.querySelectorAll('[data-log]').forEach(input => input.addEventListener('change', event => {
     state.logs[Number(event.target.dataset.log)].visible = event.target.checked
     drawOverlay()
   }))
+  document.querySelectorAll('[data-water-level]').forEach(input => input.addEventListener('change', event => {
+    const log = state.logs[Number(event.target.dataset.waterLevel)]
+    const level = Number(event.target.value)
+    log.waterLevel = event.target.value === '' || !Number.isFinite(level) ? null : level
+    log.waterLevelSource = 'manual'
+    log.correction = log.waterLevel == null ? null : Math.round((log.waterLevel - 33) * 100) / 100
+    renderLogs(); drawOverlay()
+  }))
+  document.querySelectorAll('[data-depth-adjustment]').forEach(input => input.addEventListener('change', event => {
+    const log = state.logs[Number(event.target.dataset.depthAdjustment)]
+    log.depthAdjustment = Number(event.target.value) || 0
+    renderLogs(); drawOverlay()
+  }))
+  document.querySelectorAll('[data-prune-distance]').forEach(input => input.addEventListener('change', event => {
+    const log = state.logs[Number(event.target.dataset.pruneDistance)]
+    log.pruneDistance = Math.max(0, Number(event.target.value) || 0)
+    renderLogs(); drawOverlay()
+  }))
+}
+
+async function exportVisibleTracks(format) {
+  const tracks = state.logs.filter(log => log.visible)
+  if (!tracks.length) return toast('Välj minst ett synligt spår att exportera.')
+  const content = format === 'txt' ? exportWaypoints(tracks) : exportCsv(tracks)
+  const path = await window.sjomatning.exportTracks({
+    format,
+    content,
+    suggestedName: `matspår-bearbetade.${format}`
+  })
+  if (path) toast(`Exporterade ${tracks.length} spår.`)
 }
 
 async function loadWaterLevel() {
@@ -564,11 +630,12 @@ overlay.addEventListener('mousemove', event => {
   $('cursorPosition').textContent = `${geo.lat.toFixed(6)}, ${geo.lon.toFixed(6)}`
   let nearest = null
   state.logs.filter(log => log.visible).forEach(log => {
-    const stride = Math.max(1, Math.ceil(log.points.length / 1000))
-    for (let i = 0; i < log.points.length; i += stride) {
-      const pixel = geoToPixel(log.points[i].lat, log.points[i].lon)
+    const points = processedPoints(log)
+    const stride = Math.max(1, Math.ceil(points.length / 1000))
+    for (let i = 0; i < points.length; i += stride) {
+      const pixel = geoToPixel(points[i].lat, points[i].lon)
       const distance = pixel ? Math.hypot(pixel.x - point.x, pixel.y - point.y) * state.scale : Infinity
-      if (distance < 10 && (!nearest || distance < nearest.distance)) nearest = { log, point: log.points[i], distance }
+      if (distance < 10 && (!nearest || distance < nearest.distance)) nearest = { log, point: points[i], distance }
     }
   })
   if (nearest) {
@@ -597,6 +664,16 @@ $('emptyOpenPdf').addEventListener('click', openPdf)
 $('openLogs').addEventListener('click', openLogs)
 $('fetchWaterLevel').addEventListener('click', loadWaterLevel)
 $('applyWaterLevel').addEventListener('click', applyWaterLevel)
+$('exportCsv').addEventListener('click', () => exportVisibleTracks('csv'))
+$('exportWaypoints').addEventListener('click', () => exportVisibleTracks('txt'))
+$('toggleLibrary').addEventListener('click', () => {
+  const content = $('libraryContent')
+  const collapsed = !content.classList.contains('hidden')
+  content.classList.toggle('hidden', collapsed)
+  $('toggleLibrary').textContent = collapsed ? 'Visa' : 'Dölj'
+  $('toggleLibrary').setAttribute('aria-expanded', String(!collapsed))
+  localStorage.setItem('library:collapsed', String(collapsed))
+})
 $('zoomIn').addEventListener('click', () => setScale(state.scale * 1.2))
 $('zoomOut').addEventListener('click', () => setScale(state.scale / 1.2))
 $('fitView').addEventListener('click', fitView)
@@ -648,10 +725,16 @@ loadRoxenMap().catch(error => {
 })
 
 window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
-  const title = `Sjömätning ${version} · byggd ${buildDate}`
+  const title = `Sjömätning ${version} · programmet uppdaterades senast ${buildDate}`
   document.title = title
-  $('buildInfo').textContent = `v${version} · ${buildDate}`
+  $('buildInfo').textContent = `v${version} · uppdaterades senast ${buildDate}`
 })
+
+if (localStorage.getItem('library:collapsed') === 'true') {
+  $('libraryContent').classList.add('hidden')
+  $('toggleLibrary').textContent = 'Visa'
+  $('toggleLibrary').setAttribute('aria-expanded', 'false')
+}
 
 let updateBarTimer
 window.sjomatning.onUpdaterStatus(({ status, detail }) => {

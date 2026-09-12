@@ -34,15 +34,17 @@
               <p class="label">BIBLIOTEK</p>
               <h2 id="folderName">Sparade filer</h2>
             </div>
-            <span id="folderCount" class="badge success"></span>
+            <div class="panel-heading-actions"><span id="folderCount" class="badge success"></span><button id="toggleLibrary" class="small-button" aria-expanded="true">Dölj</button></div>
           </div>
-          <div class="folder-section">
-            <h3>Fältmanus</h3>
-            <div id="folderPdfList" class="folder-file-list"></div>
-          </div>
-          <div class="folder-section">
-            <h3>Mätspår</h3>
-            <div id="folderTrackList" class="folder-file-list"></div>
+          <div id="libraryContent">
+            <div class="folder-section">
+              <h3>Fältmanus</h3>
+              <div id="folderPdfList" class="folder-file-list"></div>
+            </div>
+            <div class="folder-section">
+              <h3>Mätspår</h3>
+              <div id="folderTrackList" class="folder-file-list"></div>
+            </div>
           </div>
         </section>
 
@@ -108,6 +110,10 @@
             <span class="step-number small">3</span>
           </div>
           <div id="logList" class="log-list"></div>
+          <div class="export-actions">
+            <button id="exportCsv" class="button wide">Exportera synliga som CSV</button>
+            <button id="exportWaypoints" class="button wide secondary">Exportera waypoint-TXT</button>
+          </div>
         </section>
       </aside>
 

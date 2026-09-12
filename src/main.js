@@ -29,7 +29,7 @@ function createWindow() {
     minWidth: 1050,
     minHeight: 680,
     backgroundColor: '#eef3f1',
-    title: `Sjömätning ${app.getVersion()} · byggd ${packageMetadata.buildDate}`,
+    title: `Sjömätning ${app.getVersion()} · programmet uppdaterades senast ${packageMetadata.buildDate}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -148,6 +148,19 @@ ipcMain.handle('roxen:water-level', async (_event, date) => {
 })
 
 ipcMain.handle('app:info', () => ({ version: app.getVersion(), buildDate: packageMetadata.buildDate }))
+
+ipcMain.handle('tracks:export', async (_event, { suggestedName, content, format }) => {
+  if (typeof content !== 'string' || content.length > 100 * 1024 * 1024) throw new Error('Ogiltigt exportinnehåll.')
+  const extension = format === 'txt' ? 'txt' : 'csv'
+  const result = await dialog.showSaveDialog({
+    title: 'Exportera bearbetade mätspår',
+    defaultPath: suggestedName,
+    filters: [{ name: extension === 'txt' ? 'SeaClear waypoint' : 'CSV', extensions: [extension] }]
+  })
+  if (result.canceled || !result.filePath) return null
+  await fs.writeFile(result.filePath, content, 'utf8')
+  return result.filePath
+})
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('sjomatning', {
   launchPdf: () => ipcRenderer.invoke('files:launch-pdf'),
   getRoxenWaterLevel: date => ipcRenderer.invoke('roxen:water-level', date),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
+  exportTracks: options => ipcRenderer.invoke('tracks:export', options),
   onUpdaterStatus: callback => ipcRenderer.on('updater:status', (_event, status) => callback(status)),
   installUpdate: () => ipcRenderer.invoke('updater:install')
 })

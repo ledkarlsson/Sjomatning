@@ -63,6 +63,7 @@ h3 { margin: 0 0 8px; color: var(--muted); font-size: 11px; letter-spacing: .08e
 .panel p:last-child { margin-bottom: 0; }
 .muted { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .panel-heading, .status-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.panel-heading-actions { display: flex; align-items: center; gap: 6px; }
 .status-row { align-items: center; }
 .step-number { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; display: grid; place-items: center; background: var(--mint); color: var(--green-dark); font-weight: 800; }
 .step-number.small { width: 25px; height: 25px; flex-basis: 25px; font-size: 12px; }
@@ -83,8 +84,15 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 88
 .log-title { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 750; }
 .log-meta { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .log-toggle { accent-color: var(--log-color); }
+.log-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 9px; }
+.log-controls label { min-width: 0; font-size: 9px; }
+.log-controls input { margin-top: 3px; padding: 6px; font-size: 11px; }
+.export-actions { margin-top: 12px; padding-top: 3px; border-top: 1px solid #edf1ef; }
+.button.secondary { margin-top: 7px; background: white; color: var(--green); }
 
 .folder-section { margin-top: 16px; }
+.folder-group + .folder-group { margin-top: 12px; }
+.folder-group-title { margin: 0 0 6px; color: var(--muted); font-size: 10px; font-weight: 800; }
 .folder-file-list { display: grid; gap: 7px; }
 .folder-file-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px; border: 1px solid #e1e8e5; border-radius: 8px; background: #fafcfb; }
 .folder-file-card.invalid { opacity: .65; }
