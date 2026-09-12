@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data:; connect-src 'self'">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sjömätning</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">FÄLTVERKTYG</p>
+        <h1>Sjömätning</h1>
+      </div>
+      <div class="header-actions">
+        <button id="openPdf" class="button primary">Öppna fältmanus</button>
+        <button id="openLogs" class="button">Lägg till mätloggar</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section class="panel intro" id="introPanel">
+          <span class="step-number">1</span>
+          <div>
+            <h2>Välj ett manus</h2>
+            <p>Öppna ett PDF-manus. Georeferering läses automatiskt när den finns.</p>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="documentPanel">
+          <p class="label">FÄLTMANUS</p>
+          <h2 id="documentName">–</h2>
+          <div class="status-row">
+            <span id="geoBadge" class="badge warning">Ej kalibrerat</span>
+            <span id="pageInfo" class="muted"></span>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="calibrationPanel">
+          <div class="panel-heading">
+            <div>
+              <p class="label">KALIBRERING</p>
+              <h2>Koppla karta till GPS</h2>
+            </div>
+            <span class="step-number small">2</span>
+          </div>
+          <p class="muted">Skriv koordinaten för en känd punkt och klicka sedan på samma punkt i kartan. Två diagonala punkter räcker för ett nordriktat manus; tre ger en affin kalibrering.</p>
+          <div class="coordinate-grid">
+            <label>Latitud<input id="calLat" type="number" step="0.000001" placeholder="58.486870"></label>
+            <label>Longitud<input id="calLon" type="number" step="0.000001" placeholder="15.675770"></label>
+          </div>
+          <button id="armCalibration" class="button wide">Placera referenspunkt</button>
+          <div id="calibrationPoints" class="point-list"></div>
+          <button id="clearCalibration" class="text-button hidden">Rensa kalibrering</button>
+        </section>
+
+        <section class="panel hidden" id="logsPanel">
+          <div class="panel-heading">
+            <div>
+              <p class="label">MÄTNINGAR</p>
+              <h2>Importerade körningar</h2>
+            </div>
+            <span class="step-number small">3</span>
+          </div>
+          <div id="logList" class="log-list"></div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <div class="toolbar">
+          <div class="tool-group">
+            <button id="zoomOut" class="icon-button" title="Zooma ut">−</button>
+            <output id="zoomValue">100 %</output>
+            <button id="zoomIn" class="icon-button" title="Zooma in">+</button>
+            <button id="fitView" class="text-button">Anpassa</button>
+          </div>
+          <div id="cursorPosition" class="cursor-position">Ingen geografisk position</div>
+          <div class="depth-legend" aria-label="Djupskala">
+            <span>Grundare</span><i></i><span>Djupare</span>
+          </div>
+        </div>
+        <div id="viewport" class="viewport empty">
+          <div id="dropOverlay" class="drop-overlay hidden">
+            <div><strong>Släpp fältmanuset här</strong><span>PDF-filer stöds</span></div>
+          </div>
+          <div id="emptyState" class="empty-state">
+            <div class="chart-mark">⌁</div>
+            <h2>Fältmanuset blir din arbetsyta</h2>
+            <p>Öppna ett PDF-manus och lägg sedan mätspåren direkt ovanpå kartan.</p>
+            <button id="emptyOpenPdf" class="button primary">Välj fältmanus</button>
+          </div>
+          <div id="canvasWrap" class="canvas-wrap hidden">
+            <canvas id="pdfCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+            <div id="tooltip" class="tooltip hidden"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>

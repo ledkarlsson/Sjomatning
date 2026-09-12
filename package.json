@@ -1,0 +1,62 @@
+{
+  "name": "sjomatning",
+  "productName": "Sjömätning",
+  "version": "0.1.0",
+  "description": "Fältmanus, mätspår och djupdata för sjömätning",
+  "main": "src/main.js",
+  "author": "Sjömätning",
+  "license": "MIT",
+  "repository": "https://github.com/ledkarlsson/Sjomatning",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder --dir",
+    "make": "electron-builder --win nsis",
+    "test": "node --test",
+    "lint": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2",
+    "pdfjs-dist": "^6.3.289"
+  },
+  "devDependencies": {
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "se.sjomatning.app",
+    "productName": "Sjömätning",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "out"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Sjomatning-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sjömätning"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ledkarlsson",
+        "repo": "Sjomatning"
+      }
+    ]
+  }
+}
