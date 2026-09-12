@@ -141,7 +141,7 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 88
 .chart-mark { margin: 0 auto 17px; width: 66px; height: 66px; border: 2px solid #9bb8ae; border-radius: 50%; display: grid; place-items: center; color: var(--green); font-size: 38px; background: rgba(255,255,255,.65); }
 .canvas-wrap { position: relative; margin: 24px auto; box-shadow: 0 7px 25px rgba(18, 49, 42, .2); transform-origin: top left; }
 canvas { position: absolute; inset: 0; display: block; }
-#overlayCanvas { cursor: crosshair; }
+#overlayCanvas { cursor: grab; }
 .map-attribution { position: absolute; right: 4px; bottom: 4px; z-index: 3; padding: 3px 6px; border-radius: 3px; background: rgba(255,255,255,.88); color: #344b46; font-size: 10px; }
 .map-attribution a { color: #176b58; }
 .tooltip { position: fixed; z-index: 10; pointer-events: none; background: rgba(12, 40, 34, .94); color: white; padding: 8px 10px; border-radius: 7px; font-size: 11px; line-height: 1.45; box-shadow: 0 3px 15px rgba(0,0,0,.2); }

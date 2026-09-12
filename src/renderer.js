@@ -692,29 +692,38 @@ viewportElement.addEventListener('wheel', event => {
 }, { passive: false })
 
 let pan = null
+let suppressClick = false
 viewportElement.addEventListener('pointerdown', event => {
-  if (event.button !== 2 || !state.page) return
-  event.preventDefault()
-  pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewportElement.scrollLeft, scrollTop: viewportElement.scrollTop }
+  if (event.button !== 0 || !state.page) return
+  pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewportElement.scrollLeft, scrollTop: viewportElement.scrollTop, moved: false }
   viewportElement.setPointerCapture(event.pointerId)
-  viewportElement.classList.add('panning')
-  $('tooltip').classList.add('hidden')
 })
 viewportElement.addEventListener('pointermove', event => {
   if (!pan || event.pointerId !== pan.pointerId) return
+  if (!pan.moved && Math.hypot(event.clientX - pan.x, event.clientY - pan.y) < 4) return
+  if (!pan.moved) {
+    pan.moved = true
+    viewportElement.classList.add('panning')
+    $('tooltip').classList.add('hidden')
+  }
+  event.preventDefault()
   viewportElement.scrollLeft = pan.scrollLeft - (event.clientX - pan.x)
   viewportElement.scrollTop = pan.scrollTop - (event.clientY - pan.y)
 })
 function stopPanning(event) {
   if (!pan || event.pointerId !== pan.pointerId) return
+  suppressClick = pan.moved && event.type === 'pointerup'
   pan = null
   viewportElement.classList.remove('panning')
 }
 viewportElement.addEventListener('pointerup', stopPanning)
 viewportElement.addEventListener('pointercancel', stopPanning)
-viewportElement.addEventListener('contextmenu', event => {
-  if (state.page) event.preventDefault()
-})
+viewportElement.addEventListener('click', event => {
+  if (!suppressClick) return
+  suppressClick = false
+  event.preventDefault()
+  event.stopPropagation()
+}, true)
 
 let dragDepth = 0
 window.addEventListener('dragenter', event => {
