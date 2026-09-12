@@ -97,6 +97,8 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 88
 .file-state.geo { color: var(--green); }
 .small-button { border: 1px solid #cbd8d3; border-radius: 6px; padding: 6px 8px; background: white; color: var(--green-dark); font-size: 10px; font-weight: 800; }
 .small-button:disabled { cursor: default; opacity: .5; }
+.file-actions { display: flex; gap: 5px; }
+.small-button.danger { color: #a43a2e; font-size: 15px; line-height: 1; }
 .empty-list { margin: 0; color: var(--muted); font-size: 11px; }
 .map-summary { margin: 4px 0 0; max-width: 225px; color: var(--green); font-size: 10px; line-height: 1.35; }
 .track-fit { color: var(--green); font-weight: 750; }

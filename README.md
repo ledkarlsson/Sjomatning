@@ -117,3 +117,5 @@ Varje push till `main` får en unik version och publiceras automatiskt som en Gi
 Appen använder en separat Chromium-cache och tillåter bara en körande instans. Det förhindrar Windows-felet `Unable to move/create cache` vid snabb omstart och efter automatisk uppdatering.
 
 Versionsnummer och UTC-byggdatum visas i både fönstertiteln och apphuvudet. Releaseflödet stämplar båda värdena i paketet före Windows-bygget.
+
+Importerade PDF:er och mätspår kopieras till ett beständigt bibliotek under appens användardata och återställs vid nästa start. Identiska filer lagras bara en gång. Varje post kan tas bort från biblioteket med kryssknappen; aktiv karta eller tillagda spår tas då samtidigt bort från arbetsytan.

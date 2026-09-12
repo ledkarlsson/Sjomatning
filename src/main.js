@@ -4,7 +4,9 @@ const crypto = require('node:crypto')
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel } = require('./roxen-level')
+const { createLibraryStore } = require('./library-store')
 const packageMetadata = require('../package.json')
+let libraryStore
 
 // Chromium-cachen hålls åtskild från appens beständiga data. Det undviker
 // låsta Cache/GPUCache-mappar vid uppdatering och snabb omstart på Windows.
@@ -54,7 +56,9 @@ function createWindow() {
 async function selectFiles(options) {
   const result = await dialog.showOpenDialog(options)
   if (result.canceled) return []
-  return Promise.all(result.filePaths.map(readSurveyFile))
+  const files = await Promise.all(result.filePaths.map(readSurveyFile))
+  await libraryStore.persist(files)
+  return files
 }
 
 async function readSurveyFile(filePath, rootPath = path.dirname(filePath)) {
@@ -100,7 +104,9 @@ ipcMain.handle('files:open-folder', async () => {
   const result = await dialog.showOpenDialog({ title: 'Välj sjömätningsmapp', properties: ['openDirectory'] })
   if (result.canceled) return null
   const folderPath = result.filePaths[0]
-  return { name: path.basename(folderPath), path: folderPath, files: await collectSurveyFiles(folderPath) }
+  const files = await collectSurveyFiles(folderPath)
+  await libraryStore.persist(files)
+  return { name: path.basename(folderPath), path: folderPath, files }
 })
 
 ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
@@ -116,8 +122,12 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
       files.push(await readSurveyFile(inputPath))
     }
   }
+  await libraryStore.persist(files)
   return { folders, files }
 })
+
+ipcMain.handle('library:list', () => libraryStore.list())
+ipcMain.handle('library:remove', (_event, id) => libraryStore.remove(id))
 
 ipcMain.handle('files:launch-pdf', async () => {
   const argument = process.argv.find(value => value.startsWith('--test-pdf='))
@@ -140,6 +150,7 @@ ipcMain.handle('app:info', () => ({ version: app.getVersion(), buildDate: packag
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
+  libraryStore = createLibraryStore(path.join(app.getPath('userData'), 'survey-library'))
   Menu.setApplicationMenu(null)
   createWindow()
 

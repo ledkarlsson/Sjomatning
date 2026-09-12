@@ -4,7 +4,7 @@ import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
 const colors = ['#e14b3b', '#087f8c', '#7855a6', '#d58416', '#2e6db4']
-const state = { pdf: null, pdfKey: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
+const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
 const $ = id => document.getElementById(id)
 const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
@@ -121,6 +121,7 @@ async function loadPdfFile(file) {
   try {
     const bytes = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
     state.pdfKey = `${file.name}:${bytes.byteLength}`
+    state.activePdfId = file.id || null
     state.pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
     state.page = await state.pdf.getPage(1)
     state.calibration = []
@@ -161,7 +162,7 @@ async function loadPdfFile(file) {
 
 async function openPdf() {
   const [file] = await window.sjomatning.openPdf()
-  if (file) await loadPdfFile(file)
+  if (file) { await addLibraryFiles([file]); await loadPdfFile(file) }
 }
 
 function formatBytes(bytes) {
@@ -184,7 +185,7 @@ async function openFolder() {
   }
 }
 
-async function addLibraryFiles(files, folders = []) {
+async function addLibraryFiles(files, folders = [], quiet = false) {
   const known = new Set([...state.library.pdfs, ...state.library.tracks].map(file => file.id))
   let duplicates = 0
   for (const folder of folders) if (!state.library.folders.some(item => item.path === folder.path)) state.library.folders.push(folder)
@@ -204,7 +205,7 @@ async function addLibraryFiles(files, folders = []) {
     }
   }
   renderFolder()
-  if (duplicates) toast(`${duplicates} identisk${duplicates === 1 ? ' fil' : 'a filer'} hoppades över.`)
+  if (duplicates && !quiet) toast(`${duplicates} identisk${duplicates === 1 ? ' fil' : 'a filer'} hoppades över.`)
 }
 
 function trackFit(track) {
@@ -228,21 +229,46 @@ function renderFolder() {
   const folder = state.library
   if (!folder.pdfs.length && !folder.tracks.length) return
   $('folderPanel').classList.remove('hidden')
-  $('folderName').textContent = folder.folders.length === 1 ? folder.folders[0].name : `${folder.folders.length} mappar`
+  $('folderName').textContent = `${folder.pdfs.length + folder.tracks.length} sparade filer`
   $('folderCount').textContent = `${folder.pdfs.length + folder.tracks.length} filer`
   $('folderPdfList').innerHTML = folder.pdfs.length ? folder.pdfs.map((file, index) => `
     <div class="folder-file-card">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.hasGeoData ? 'GeoPDF' : 'Utan geodata'}</i></span></div>
-      <button class="small-button" data-folder-pdf="${index}">Öppna</button>
+      <div class="file-actions"><button class="small-button" data-folder-pdf="${index}">Öppna</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort PDF">×</button></div>
     </div>`).join('') : '<p class="empty-list">Inga PDF-filer hittades.</p>'
   $('folderTrackList').innerHTML = folder.tracks.length ? folder.tracks.map((file, index) => `
     <div class="folder-file-card ${file.error ? 'invalid' : ''}">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${file.parsed ? `${file.parsed.points.length.toLocaleString('sv-SE')} punkter · ${file.name.split('.').pop().toUpperCase()}<br><i class="file-state ${trackFit(file.parsed)?.inside ? 'geo' : ''}">${fitText(file.parsed)}</i>` : escapeHtml(file.error)}</span></div>
-      <button class="small-button" data-folder-track="${index}" ${file.error ? 'disabled' : ''}>${file.loaded ? 'Ta bort' : 'Lägg till'}</button>
+      <div class="file-actions"><button class="small-button" data-folder-track="${index}" ${file.error ? 'disabled' : ''}>${file.loaded ? 'Dölj' : 'Lägg till'}</button><button class="small-button danger" data-delete-track="${index}" title="Ta bort spårfil">×</button></div>
     </div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
 
   document.querySelectorAll('[data-folder-pdf]').forEach(button => button.addEventListener('click', () => loadPdfFile(folder.pdfs[Number(button.dataset.folderPdf)])))
   document.querySelectorAll('[data-folder-track]').forEach(button => button.addEventListener('click', () => toggleFolderTrack(Number(button.dataset.folderTrack))))
+  document.querySelectorAll('[data-delete-pdf]').forEach(button => button.addEventListener('click', () => deleteLibraryFile('pdf', Number(button.dataset.deletePdf))))
+  document.querySelectorAll('[data-delete-track]').forEach(button => button.addEventListener('click', () => deleteLibraryFile('track', Number(button.dataset.deleteTrack))))
+}
+
+function clearActivePdf() {
+  state.pdf = null; state.page = null; state.activePdfId = null; state.transform = null; state.calibration = []
+  pdfCanvas.getContext('2d').clearRect(0, 0, pdfCanvas.width, pdfCanvas.height)
+  overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
+  wrap.classList.add('hidden'); $('documentPanel').classList.add('hidden'); $('calibrationPanel').classList.add('hidden')
+  $('emptyState').classList.remove('hidden'); $('introPanel').classList.remove('hidden'); viewportElement.classList.add('empty')
+  renderFolder(); renderLogs()
+}
+
+async function deleteLibraryFile(type, index) {
+  const collection = type === 'pdf' ? state.library.pdfs : state.library.tracks
+  const file = collection[index]
+  if (!file || !window.confirm(`Ta bort ${file.name} från det sparade biblioteket?`)) return
+  try {
+    await window.sjomatning.removeLibraryFile(file.id)
+    collection.splice(index, 1)
+    if (type === 'track') state.logs = state.logs.filter(log => log.sourceId !== file.id)
+    if (type === 'pdf' && state.activePdfId === file.id) clearActivePdf()
+    renderFolder(); renderLogs(); drawOverlay()
+    if (!state.library.pdfs.length && !state.library.tracks.length) $('folderPanel').classList.add('hidden')
+  } catch (error) { toast(`Kunde inte ta bort filen: ${error.message}`) }
 }
 
 function toggleFolderTrack(index) {
@@ -349,6 +375,7 @@ function correctedDepth(log, point) {
 async function openLogs() {
   const files = await window.sjomatning.openLogs()
   await importTrackFiles(files)
+  await addLibraryFiles(files, [], true)
 }
 
 async function fileBytes(file) {
@@ -544,6 +571,8 @@ window.sjomatning.launchPdf().then(file => {
 })
 
 $('waterLevelDate').value = new Date().toLocaleDateString('sv-SE')
+
+window.sjomatning.listLibrary().then(files => addLibraryFiles(files, [], true)).catch(error => toast(`Kunde inte läsa biblioteket: ${error.message}`))
 
 window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
   const title = `Sjömätning ${version} · byggd ${buildDate}`
