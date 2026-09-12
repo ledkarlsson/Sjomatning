@@ -80,6 +80,14 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 88
 .log-meta { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .log-toggle { accent-color: var(--log-color); }
 
+.water-symbol { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; background: #dcecf1; color: #087f8c; font-size: 23px; font-weight: 800; }
+.water-level-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 9px; margin-top: 13px; }
+.water-level-controls .button { height: 38px; }
+.water-level-status { min-height: 44px; margin-top: 12px; padding: 10px 11px; border-radius: 8px; background: #f2f7f6; }
+.water-level-status strong, .water-level-status span { display: block; }
+.water-level-status strong { color: #087f8c; font-size: 20px; line-height: 1.2; }
+.water-level-status span { margin-top: 3px; font-size: 11px; }
+
 .workspace { display: grid; grid-template-rows: 48px minmax(0, 1fr); min-width: 0; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--paper); color: var(--muted); font-size: 12px; }
 .tool-group { display: flex; align-items: center; gap: 7px; }

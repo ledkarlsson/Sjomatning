@@ -104,3 +104,6 @@ stöd för fler instrument och båtar.
 Python passar bra eftersom Jonas efterbehandling redan är skriven där. En liten skrivbordsapp i Python/PySide6 kan återanvända hans befintliga algoritmer. Alternativt kan Signal K användas som mottagarlager och gränssnittet göras som en lokal webbapp.
 
 Min rekommendation är att inte börja med att bygga en ny komplett sjökortsplotter. Bygg en robust ”svart låda” för rådata först och låt SeaClear/OpenCPN hantera kartvisningen under den första säsongen. När loggningen är bevisat stabil kan fältmanuset byggas in.
+Appen kan hämta Roxens publicerade dygnsvattenstånd från Tekniska verken. Välj dag i panelen **Vattenstånd** och använd vid behov nivån som korrigering för alla importerade körningar. Värdena anges i RH00 och kräver internetanslutning.
+
+Mätspår kan öppnas med filväljaren eller dras direkt till arbetsytan. Appen stöder SeaClear-spår som TXT/CSV och binära TRC-filer. Äldre waypoint-TXT läses också; där används det okorrigerade värdet efter `Ekolod:` så att appens vattenståndskorrigering inte räknas två gånger.

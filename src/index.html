@@ -15,7 +15,7 @@
       </div>
       <div class="header-actions">
         <button id="openPdf" class="button primary">Öppna fältmanus</button>
-        <button id="openLogs" class="button">Lägg till mätloggar</button>
+        <button id="openLogs" class="button">Lägg till mätspår</button>
       </div>
     </header>
 
@@ -56,6 +56,23 @@
           <button id="clearCalibration" class="text-button hidden">Rensa kalibrering</button>
         </section>
 
+        <section class="panel" id="waterLevelPanel">
+          <div class="panel-heading">
+            <div>
+              <p class="label">ROXEN</p>
+              <h2>Vattenstånd</h2>
+            </div>
+            <span class="water-symbol" aria-hidden="true">≈</span>
+          </div>
+          <p class="muted">Hämta publicerad dygnsnivå från Tekniska verken. Nivån anges i RH00.</p>
+          <div class="water-level-controls">
+            <label>Dag<input id="waterLevelDate" type="date"></label>
+            <button id="fetchWaterLevel" class="button">Hämta</button>
+          </div>
+          <div id="waterLevelStatus" class="water-level-status muted" aria-live="polite">Välj en dag.</div>
+          <button id="applyWaterLevel" class="button wide hidden">Använd för djupkorrigering</button>
+        </section>
+
         <section class="panel hidden" id="logsPanel">
           <div class="panel-heading">
             <div>
@@ -83,12 +100,12 @@
         </div>
         <div id="viewport" class="viewport empty">
           <div id="dropOverlay" class="drop-overlay hidden">
-            <div><strong>Släpp fältmanuset här</strong><span>PDF-filer stöds</span></div>
+            <div><strong>Släpp filer här</strong><span>Fältmanus: PDF · Mätspår: TXT, CSV eller TRC</span></div>
           </div>
           <div id="emptyState" class="empty-state">
             <div class="chart-mark">⌁</div>
             <h2>Fältmanuset blir din arbetsyta</h2>
-            <p>Öppna ett PDF-manus och lägg sedan mätspåren direkt ovanpå kartan.</p>
+            <p>Öppna ett PDF-manus och lägg sedan mätspåren direkt ovanpå kartan. Du kan även släppa PDF-, TXT- och TRC-filer här.</p>
             <button id="emptyOpenPdf" class="button primary">Välj fältmanus</button>
           </div>
           <div id="canvasWrap" class="canvas-wrap hidden">

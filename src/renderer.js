@@ -1,9 +1,10 @@
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
+import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
 const colors = ['#e14b3b', '#087f8c', '#7855a6', '#d58416', '#2e6db4']
-const state = { pdf: null, pdfKey: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false }
+const state = { pdf: null, pdfKey: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null }
 const $ = id => document.getElementById(id)
 const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
@@ -245,9 +246,18 @@ function correctedDepth(log, point) {
 
 async function openLogs() {
   const files = await window.sjomatning.openLogs()
+  await importTrackFiles(files)
+}
+
+async function fileBytes(file) {
+  return file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
+}
+
+async function importTrackFiles(files) {
   for (const file of files) {
     try {
-      const parsed = parseLog(bytesToText(new Uint8Array(file.bytes)), file.name)
+      const bytes = await fileBytes(file)
+      const parsed = file.name.toLowerCase().endsWith('.trc') ? parseTrcTrack(bytes, file.name) : parseTextTrack(bytesToText(bytes), file.name)
       parsed.color = colors[state.logs.length % colors.length]
       parsed.visible = true
       state.logs.push(parsed)
@@ -258,29 +268,13 @@ async function openLogs() {
   drawOverlay()
 }
 
-function parseLog(text, name) {
-  const points = []
-  const warnings = []
-  text.split(/\r\r?\n|\n|\r/).forEach((line, index) => {
-    if (!line.trim()) return
-    const cells = line.split(',').map(value => value.trim())
-    if (cells.length !== 6) { warnings.push(index + 1); return }
-    const [date, time] = cells
-    const [lat, lon, speed, depth] = cells.slice(2).map(Number)
-    if (![lat, lon, speed, depth].every(Number.isFinite)) { warnings.push(index + 1); return }
-    points.push({ date, time, lat, lon, speed, depth })
-  })
-  if (!points.length) throw new Error(`${name} innehåller inga giltiga mätpunkter.`)
-  const match = name.match(/^\d{8}_(\d{2}[.,]\d{2})_/)
-  const waterLevel = match ? Number(match[1].replace(',', '.')) : null
-  return { name, points, warnings, waterLevel, correction: waterLevel == null ? null : Math.round((waterLevel - 33) * 100) / 100 }
-}
-
 function renderLogs() {
   $('logsPanel').classList.toggle('hidden', state.logs.length === 0)
+  $('applyWaterLevel').classList.toggle('hidden', !state.roxenLevel || state.logs.length === 0)
   $('logList').innerHTML = state.logs.map((log, index) => {
     const depths = log.points.map(point => correctedDepth(log, point))
-    const correction = log.correction == null ? 'Ingen vattenståndskorrigering' : `Vattenstånd ${log.waterLevel.toFixed(2)} m · korrektion −${log.correction.toFixed(2)} m`
+    const source = log.waterLevelSource === 'roxen' ? ' · Roxen, Tekniska verken' : ''
+    const correction = log.correction == null ? 'Ingen vattenståndskorrigering' : `Vattenstånd ${log.waterLevel.toFixed(2)} m${source} · korrektion −${log.correction.toFixed(2)} m`
     return `<div class="log-card" style="--log-color:${log.color}">
       <label class="log-title"><input class="log-toggle" type="checkbox" data-log="${index}" ${log.visible ? 'checked' : ''}>${log.name}</label>
       <div class="log-meta">${log.points.length.toLocaleString('sv-SE')} punkter · ${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m<br>${correction}</div>
@@ -290,6 +284,46 @@ function renderLogs() {
     state.logs[Number(event.target.dataset.log)].visible = event.target.checked
     drawOverlay()
   }))
+}
+
+async function loadWaterLevel() {
+  const date = $('waterLevelDate').value
+  if (!date) return toast('Välj först en dag.')
+  $('fetchWaterLevel').disabled = true
+  $('fetchWaterLevel').textContent = 'Hämtar…'
+  $('waterLevelStatus').textContent = 'Kontaktar Tekniska verken…'
+  $('applyWaterLevel').classList.add('hidden')
+  try {
+    const result = await window.sjomatning.getRoxenWaterLevel(date)
+    if (!result.ok) {
+      state.roxenLevel = null
+      $('waterLevelStatus').textContent = result.message
+      return
+    }
+    state.roxenLevel = result.data
+    const formattedDate = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'long' }).format(new Date(`${date}T12:00:00`))
+    $('waterLevelStatus').innerHTML = `<strong>${result.data.level.toFixed(2)} m ö.h.</strong><span>${formattedDate} · RH00</span>`
+    $('applyWaterLevel').classList.toggle('hidden', state.logs.length === 0)
+  } catch (error) {
+    state.roxenLevel = null
+    $('waterLevelStatus').textContent = 'Vattenståndet kunde inte hämtas. Kontrollera internetanslutningen och försök igen.'
+    console.error(error)
+  } finally {
+    $('fetchWaterLevel').disabled = false
+    $('fetchWaterLevel').textContent = 'Hämta'
+  }
+}
+
+function applyWaterLevel() {
+  if (!state.roxenLevel || state.logs.length === 0) return
+  state.logs.forEach(log => {
+    log.waterLevel = state.roxenLevel.level
+    log.waterLevelSource = 'roxen'
+    log.correction = Math.round((state.roxenLevel.level - 33) * 100) / 100
+  })
+  renderLogs()
+  drawOverlay()
+  toast(`Vattenstånd ${state.roxenLevel.level.toFixed(2)} m används för ${state.logs.length} körning${state.logs.length === 1 ? '' : 'ar'}.`)
 }
 
 function canvasPoint(event) {
@@ -348,6 +382,8 @@ $('clearCalibration').addEventListener('click', () => {
 $('openPdf').addEventListener('click', openPdf)
 $('emptyOpenPdf').addEventListener('click', openPdf)
 $('openLogs').addEventListener('click', openLogs)
+$('fetchWaterLevel').addEventListener('click', loadWaterLevel)
+$('applyWaterLevel').addEventListener('click', applyWaterLevel)
 $('zoomIn').addEventListener('click', () => setScale(state.scale * 1.2))
 $('zoomOut').addEventListener('click', () => setScale(state.scale / 1.2))
 $('fitView').addEventListener('click', fitView)
@@ -376,11 +412,14 @@ window.addEventListener('drop', async event => {
   $('dropOverlay').classList.add('hidden')
   const files = [...event.dataTransfer.files]
   const pdf = files.find(file => file.name.toLowerCase().endsWith('.pdf'))
-  if (!pdf) return toast('Släpp en PDF-fil för att öppna ett fältmanus.')
-  if (files.length > 1) toast('Den första PDF-filen öppnas som fältmanus.')
-  await loadPdfFile(pdf)
+  const tracks = files.filter(file => /\.(txt|csv|trc)$/i.test(file.name))
+  if (!pdf && tracks.length === 0) return toast('Släpp ett fältmanus (PDF) eller mätspår (TXT, CSV eller TRC).')
+  if (pdf) await loadPdfFile(pdf)
+  if (tracks.length) await importTrackFiles(tracks)
 })
 
 window.sjomatning.launchPdf().then(file => {
   if (file) loadPdfFile(file)
 })
+
+$('waterLevelDate').value = new Date().toLocaleDateString('sv-SE')

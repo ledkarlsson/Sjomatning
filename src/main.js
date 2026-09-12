@@ -2,6 +2,7 @@ const path = require('node:path')
 const fs = require('node:fs/promises')
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
+const { fetchRoxenLevel } = require('./roxen-level')
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -53,7 +54,7 @@ ipcMain.handle('files:open-pdf', () => selectFiles({
 ipcMain.handle('files:open-logs', () => selectFiles({
   title: 'Välj mätloggar',
   properties: ['openFile', 'multiSelections'],
-  filters: [{ name: 'Mätloggar', extensions: ['txt', 'csv'] }]
+  filters: [{ name: 'Mätspår', extensions: ['txt', 'csv', 'trc'] }]
 }))
 
 ipcMain.handle('files:launch-pdf', async () => {
@@ -61,6 +62,16 @@ ipcMain.handle('files:launch-pdf', async () => {
   if (!argument || app.isPackaged) return null
   const filePath = argument.slice('--test-pdf='.length)
   return { name: path.basename(filePath), path: filePath, bytes: await fs.readFile(filePath) }
+})
+
+ipcMain.handle('roxen:water-level', async (_event, date) => {
+  try {
+    const result = await fetchRoxenLevel(date)
+    return result ? { ok: true, data: result } : { ok: false, message: 'Det finns inget publicerat vattenstånd för den valda dagen.' }
+  } catch (error) {
+    console.error('Vattenståndet kunde inte hämtas', error)
+    return { ok: false, message: `Vattenståndet kunde inte hämtas: ${error.message}` }
+  }
 })
 
 app.whenReady().then(() => {
