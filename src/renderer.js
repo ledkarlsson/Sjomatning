@@ -624,6 +624,7 @@ overlay.addEventListener('click', event => {
 })
 
 overlay.addEventListener('mousemove', event => {
+  if (viewportElement.classList.contains('panning')) return
   if (!state.transform) return
   const point = canvasPoint(event)
   const geo = pixelToGeo(point.x, point.y)
@@ -678,6 +679,42 @@ $('zoomIn').addEventListener('click', () => setScale(state.scale * 1.2))
 $('zoomOut').addEventListener('click', () => setScale(state.scale / 1.2))
 $('fitView').addEventListener('click', fitView)
 window.addEventListener('resize', () => { if (state.page && Math.abs(state.scale - state.fitScale) < .02) fitView() })
+
+viewportElement.addEventListener('wheel', event => {
+  if (!state.page) return
+  event.preventDefault()
+  const point = canvasPoint(event)
+  const nextScale = state.scale * Math.exp(-event.deltaY * .0015)
+  setScale(nextScale)
+  const rect = overlay.getBoundingClientRect()
+  viewportElement.scrollLeft += rect.left + point.x * state.scale - event.clientX
+  viewportElement.scrollTop += rect.top + point.y * state.scale - event.clientY
+}, { passive: false })
+
+let pan = null
+viewportElement.addEventListener('pointerdown', event => {
+  if (event.button !== 2 || !state.page) return
+  event.preventDefault()
+  pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewportElement.scrollLeft, scrollTop: viewportElement.scrollTop }
+  viewportElement.setPointerCapture(event.pointerId)
+  viewportElement.classList.add('panning')
+  $('tooltip').classList.add('hidden')
+})
+viewportElement.addEventListener('pointermove', event => {
+  if (!pan || event.pointerId !== pan.pointerId) return
+  viewportElement.scrollLeft = pan.scrollLeft - (event.clientX - pan.x)
+  viewportElement.scrollTop = pan.scrollTop - (event.clientY - pan.y)
+})
+function stopPanning(event) {
+  if (!pan || event.pointerId !== pan.pointerId) return
+  pan = null
+  viewportElement.classList.remove('panning')
+}
+viewportElement.addEventListener('pointerup', stopPanning)
+viewportElement.addEventListener('pointercancel', stopPanning)
+viewportElement.addEventListener('contextmenu', event => {
+  if (state.page) event.preventDefault()
+})
 
 let dragDepth = 0
 window.addEventListener('dragenter', event => {
