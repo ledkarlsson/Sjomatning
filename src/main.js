@@ -39,6 +39,7 @@ function createWindow() {
   })
 
   win.loadFile(path.join(__dirname, 'index.html'))
+  win.webContents.setUserAgent(`Sjomatning/${app.getVersion()} (+https://github.com/ledkarlsson/Sjomatning)`)
 
   const screenshotArg = process.argv.find(argument => argument.startsWith('--screenshot='))
   if (screenshotArg && !app.isPackaged) {

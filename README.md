@@ -1,6 +1,6 @@
 # Sjömätning
 
-En Windowsapp för att öppna fältmanus, kalibrera vanliga PDF-kartor och visa SeaClear-loggar med mätspår och djup. Appen är byggd i Electron för att kart- och visualiseringslogiken senare ska kunna återanvändas i en mobil lösning.
+En Windowsapp som automatiskt visar en kostnadsfri GPS-karta över Roxen, kan öppna och kalibrera PDF-fältmanus samt visar SeaClear-loggar med mätspår och djup. Roxenkartan använder OpenStreetMap som bakgrund och OpenSeaMap som nautiskt lager och kräver internetanslutning. Den fria kartan är en översiktskarta och ersätter inte ett officiellt sjökort för navigation; Sjöfartsverkets kompletta sjökortsdata är licensierad.
 
 ## Kom igång
 
@@ -11,7 +11,7 @@ npm install
 npm start
 ```
 
-I appen:
+I appen laddas Roxenkartan automatiskt. Därefter kan du lägga till mätspår direkt. För egna fältmanus:
 
 1. Öppna ett fältmanus i PDF-format med knappen eller dra PDF-filen direkt till appfönstret.
 2. Om PDF:en är en GeoPDF läses georefereringen automatiskt.

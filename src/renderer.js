@@ -1,10 +1,11 @@
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
+import { createWebMap, geoToMapPixel, mapPixelToGeo, tilesForMap } from './web-map.mjs'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
 const colors = ['#e14b3b', '#087f8c', '#7855a6', '#d58416', '#2e6db4']
-const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
+const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, map: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
 const $ = id => document.getElementById(id)
 const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
@@ -100,6 +101,7 @@ function calibrationTransform(points) {
 }
 
 function geoToPixel(lat, lon) {
+  if (state.map) return geoToMapPixel(state.map, lat, lon)
   const t = state.transform
   if (!t) return null
   if (t.type === 'axis') return { x: (lon - t.lonOffset) / t.lonScale, y: (lat - t.latOffset) / t.latScale }
@@ -111,6 +113,7 @@ function geoToPixel(lat, lon) {
 }
 
 function pixelToGeo(x, y) {
+  if (state.map) return mapPixelToGeo(state.map, x, y)
   const t = state.transform
   if (!t) return null
   if (t.type === 'axis') return { lon: t.lonScale * x + t.lonOffset, lat: t.latScale * y + t.latOffset }
@@ -120,6 +123,8 @@ function pixelToGeo(x, y) {
 async function loadPdfFile(file) {
   try {
     const bytes = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
+    state.map = null
+    $('mapAttribution').classList.add('hidden')
     state.pdfKey = `${file.name}:${bytes.byteLength}`
     state.activePdfId = file.id || null
     state.pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
@@ -158,6 +163,64 @@ async function loadPdfFile(file) {
     console.error(error)
     toast(`Kunde inte öppna PDF: ${error.message}`)
   }
+}
+
+function loadTile(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error(`Kunde inte hämta ${url}`))
+    image.src = url
+  })
+}
+
+async function loadRoxenMap() {
+  const map = createWebMap()
+  state.pdf = null
+  state.pdfKey = null
+  state.activePdfId = null
+  state.page = { webMap: true }
+  state.map = map
+  state.calibration = []
+  state.transform = { type: 'web-mercator' }
+  state.width = map.width
+  state.height = map.height
+  pdfCanvas.width = overlay.width = state.width
+  pdfCanvas.height = overlay.height = state.height
+  wrap.style.width = `${state.width}px`
+  wrap.style.height = `${state.height}px`
+  const context = pdfCanvas.getContext('2d')
+  context.fillStyle = '#dce8e5'
+  context.fillRect(0, 0, state.width, state.height)
+  const tiles = tilesForMap(map)
+  let failures = 0
+  await Promise.all(tiles.map(async tile => {
+    try {
+      const base = await loadTile(`https://tile.openstreetmap.org/${map.zoom}/${tile.x}/${tile.y}.png`)
+      context.drawImage(base, tile.dx, tile.dy)
+      try {
+        const nautical = await loadTile(`https://tiles.openseamap.org/seamark/${map.zoom}/${tile.x}/${tile.y}.png`)
+        context.drawImage(nautical, tile.dx, tile.dy)
+      } catch { /* Sjömärkeslagret kan sakna en enskild ruta. */ }
+    } catch { failures += 1 }
+  }))
+  $('documentName').textContent = 'Roxen · kostnadsfritt sjökort'
+  $('pageInfo').textContent = 'Översiktskarta · ej för navigation'
+  $('geoBadge').textContent = 'Automatisk GPS-karta'
+  $('geoBadge').className = 'badge success'
+  $('introPanel').classList.add('hidden')
+  $('documentPanel').classList.remove('hidden')
+  $('calibrationPanel').classList.add('hidden')
+  $('emptyState').classList.add('hidden')
+  $('mapAttribution').classList.remove('hidden')
+  wrap.classList.remove('hidden')
+  viewportElement.classList.remove('empty')
+  fitView()
+  renderFolder()
+  renderLogs()
+  drawOverlay()
+  if (failures === tiles.length) toast('Kartan kunde inte hämtas. Kontrollera internetanslutningen.')
+  else if (failures) toast(`Kartan laddades, men ${failures} kartdelar saknas.`)
 }
 
 async function openPdf() {
@@ -249,10 +312,11 @@ function renderFolder() {
 }
 
 function clearActivePdf() {
-  state.pdf = null; state.page = null; state.activePdfId = null; state.transform = null; state.calibration = []
+  state.pdf = null; state.page = null; state.map = null; state.activePdfId = null; state.transform = null; state.calibration = []
   pdfCanvas.getContext('2d').clearRect(0, 0, pdfCanvas.width, pdfCanvas.height)
   overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
   wrap.classList.add('hidden'); $('documentPanel').classList.add('hidden'); $('calibrationPanel').classList.add('hidden')
+  $('mapAttribution').classList.add('hidden')
   $('emptyState').classList.remove('hidden'); $('introPanel').classList.remove('hidden'); viewportElement.classList.add('empty')
   renderFolder(); renderLogs()
 }
@@ -292,7 +356,10 @@ function toggleFolderTrack(index) {
 
 function updateGeoStatus() {
   const badge = $('geoBadge')
-  if (state.transform) {
+  if (state.map) {
+    badge.textContent = 'Automatisk GPS-karta'
+    badge.className = 'badge success'
+  } else if (state.transform) {
     badge.textContent = state.calibration.some(p => p.automatic) ? 'GeoPDF' : 'Kalibrerat'
     badge.className = 'badge success'
   } else {
@@ -524,6 +591,7 @@ $('clearCalibration').addEventListener('click', () => {
   updateGeoStatus(); drawOverlay()
 })
 $('openPdf').addEventListener('click', openPdf)
+$('openRoxenMap').addEventListener('click', loadRoxenMap)
 $('openFolder').addEventListener('click', openFolder)
 $('emptyOpenPdf').addEventListener('click', openPdf)
 $('openLogs').addEventListener('click', openLogs)
@@ -573,6 +641,11 @@ window.sjomatning.launchPdf().then(file => {
 $('waterLevelDate').value = new Date().toLocaleDateString('sv-SE')
 
 window.sjomatning.listLibrary().then(files => addLibraryFiles(files, [], true)).catch(error => toast(`Kunde inte läsa biblioteket: ${error.message}`))
+
+loadRoxenMap().catch(error => {
+  console.error(error)
+  toast(`Kunde inte ladda Roxenkartan: ${error.message}`)
+})
 
 window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
   const title = `Sjömätning ${version} · byggd ${buildDate}`
