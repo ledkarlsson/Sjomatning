@@ -580,7 +580,9 @@ window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
   $('buildInfo').textContent = `v${version} · ${buildDate}`
 })
 
+let updateBarTimer
 window.sjomatning.onUpdaterStatus(({ status, detail }) => {
+  clearTimeout(updateBarTimer)
   const messages = {
     checking: 'Söker efter uppdateringar…', current: 'Programmet är uppdaterat.',
     available: `Version ${detail} hittades och hämtas…`, downloading: `Hämtar uppdatering: ${detail} %`,
@@ -589,5 +591,8 @@ window.sjomatning.onUpdaterStatus(({ status, detail }) => {
   $('updateText').textContent = messages[status] || ''
   $('updateBar').classList.toggle('hidden', !messages[status])
   $('installUpdate').classList.toggle('hidden', status !== 'ready')
+  if (status === 'current') {
+    updateBarTimer = setTimeout(() => $('updateBar').classList.add('hidden'), 3500)
+  }
 })
 $('installUpdate').addEventListener('click', () => window.sjomatning.installUpdate())

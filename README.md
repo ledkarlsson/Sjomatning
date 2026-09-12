@@ -119,3 +119,5 @@ Appen använder en separat Chromium-cache och tillåter bara en körande instans
 Versionsnummer och UTC-byggdatum visas i både fönstertiteln och apphuvudet. Releaseflödet stämplar båda värdena i paketet före Windows-bygget.
 
 Importerade PDF:er och mätspår kopieras till ett beständigt bibliotek under appens användardata och återställs vid nästa start. Identiska filer lagras bara en gång. Varje post kan tas bort från biblioteket med kryssknappen; aktiv karta eller tillagda spår tas då samtidigt bort från arbetsytan.
+
+Uppdateringsstatusen “Programmet är uppdaterat.” döljs automatiskt efter några sekunder. Status för hämtning, fel eller en installationsklar uppdatering ligger kvar så att användaren hinner agera.
