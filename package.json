@@ -10,7 +10,7 @@
   "scripts": {
     "start": "electron .",
     "package": "electron-builder --dir",
-    "make": "electron-builder --win nsis",
+    "make": "electron-builder --win nsis --publish never",
     "test": "node --test",
     "lint": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js"
   },
