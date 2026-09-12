@@ -113,3 +113,5 @@ Med **Öppna mapp** inventerar appen PDF-manus och mätspår även i undermappar
 Flera mappar kan läggas till med filväljaren eller genom drag-and-drop. Identiska filer identifieras med SHA-256 och importeras bara en gång. När kartan har geodata visar både biblioteket och listan över importerade spår hur många punkter som ryms inom kartan.
 
 Varje push till `main` får en unik version och publiceras automatiskt som en GitHub Release tillsammans med `latest.yml`. Installerade versioner hämtar uppdateringen i bakgrunden och visar en knapp för att starta om och installera när den är klar.
+
+Appen använder en separat Chromium-cache och tillåter bara en körande instans. Det förhindrar Windows-felet `Unable to move/create cache` vid snabb omstart och efter automatisk uppdatering.

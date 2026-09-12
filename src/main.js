@@ -5,6 +5,20 @@ const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel } = require('./roxen-level')
 
+// Chromium-cachen hålls åtskild från appens beständiga data. Det undviker
+// låsta Cache/GPUCache-mappar vid uppdatering och snabb omstart på Windows.
+app.setPath('sessionData', path.join(app.getPath('userData'), 'chromium-session'))
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
+
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
@@ -122,6 +136,7 @@ ipcMain.handle('roxen:water-level', async (_event, date) => {
 })
 
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return
   Menu.setApplicationMenu(null)
   createWindow()
 
