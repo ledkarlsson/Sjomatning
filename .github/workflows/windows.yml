@@ -3,7 +3,6 @@ name: Windowsbygge
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -24,14 +23,13 @@ jobs:
           cache: npm
       - name: Installera beroenden
         run: npm ci
-      - name: Kontrollera versionsetikett
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Sätt unik byggversion
+        if: github.event_name == 'push'
         shell: pwsh
         run: |
-          $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$packageVersion") {
-            throw "Taggen $env:GITHUB_REF_NAME matchar inte package.json v$packageVersion"
-          }
+          $version = "0.2.${{ github.run_number }}"
+          npm version $version --no-git-tag-version
+          "BUILD_VERSION=$version" >> $env:GITHUB_ENV
       - name: Testa
         run: npm test
       - name: Kontrollera JavaScript
@@ -47,9 +45,12 @@ jobs:
             out/*.blockmap
             out/latest.yml
       - name: Publicera versionsbygge
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.BUILD_VERSION }}
+          name: Sjömätning ${{ env.BUILD_VERSION }}
+          make_latest: true
           generate_release_notes: true
           files: |
             out/*.exe

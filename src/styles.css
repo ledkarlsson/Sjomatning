@@ -33,6 +33,7 @@ button { cursor: pointer; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: 27px; line-height: 1; letter-spacing: -.5px; }
 h2 { margin-bottom: 8px; font-size: 17px; line-height: 1.25; }
+h3 { margin: 0 0 8px; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .eyebrow, .label { margin-bottom: 7px; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .eyebrow { color: #aad6c8; }
 .label { color: var(--green); }
@@ -53,6 +54,7 @@ h2 { margin-bottom: 8px; font-size: 17px; line-height: 1.25; }
 .button.armed { background: var(--amber); border-color: var(--amber); }
 
 .layout { display: grid; grid-template-columns: 350px minmax(0, 1fr); height: calc(100vh - 82px); }
+.update-bar { position: fixed; top: 82px; right: 18px; z-index: 25; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 0 0 9px 9px; background: #fff4d9; color: #70470a; box-shadow: 0 4px 14px rgba(20, 50, 42, .16); font-size: 12px; font-weight: 700; }
 .sidebar { overflow-y: auto; border-right: 1px solid var(--line); background: #f3f6f4; padding: 18px; }
 .panel { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 17px; margin-bottom: 13px; box-shadow: 0 3px 12px rgba(24, 61, 52, .045); }
 .panel.intro { display: flex; gap: 13px; }
@@ -79,6 +81,23 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 88
 .log-title { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 750; }
 .log-meta { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .log-toggle { accent-color: var(--log-color); }
+
+.folder-section { margin-top: 16px; }
+.folder-file-list { display: grid; gap: 7px; }
+.folder-file-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px; border: 1px solid #e1e8e5; border-radius: 8px; background: #fafcfb; }
+.folder-file-card.invalid { opacity: .65; }
+.folder-file-main { min-width: 0; }
+.folder-file-main strong, .folder-file-main span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.folder-file-main strong { white-space: nowrap; }
+.folder-file-main strong { font-size: 12px; }
+.folder-file-main span { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.file-state { color: #8a5b12; font-style: normal; font-weight: 750; }
+.file-state.geo { color: var(--green); }
+.small-button { border: 1px solid #cbd8d3; border-radius: 6px; padding: 6px 8px; background: white; color: var(--green-dark); font-size: 10px; font-weight: 800; }
+.small-button:disabled { cursor: default; opacity: .5; }
+.empty-list { margin: 0; color: var(--muted); font-size: 11px; }
+.map-summary { margin: 4px 0 0; max-width: 225px; color: var(--green); font-size: 10px; line-height: 1.35; }
+.track-fit { color: var(--green); font-weight: 750; }
 
 .water-symbol { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; background: #dcecf1; color: #087f8c; font-size: 23px; font-weight: 800; }
 .water-level-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 9px; margin-top: 13px; }

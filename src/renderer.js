@@ -4,7 +4,7 @@ import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
 const colors = ['#e14b3b', '#087f8c', '#7855a6', '#d58416', '#2e6db4']
-const state = { pdf: null, pdfKey: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null }
+const state = { pdf: null, pdfKey: null, page: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
 const $ = id => document.getElementById(id)
 const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
@@ -164,6 +164,106 @@ async function openPdf() {
   if (file) await loadPdfFile(file)
 }
 
+function formatBytes(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} kB`
+  return `${(bytes / 1024 / 1024).toLocaleString('sv-SE', { maximumFractionDigits: 1 })} MB`
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character])
+}
+
+async function openFolder() {
+  try {
+    const folder = await window.sjomatning.openFolder()
+    if (!folder) return
+    await addLibraryFiles(folder.files, [{ name: folder.name, path: folder.path }])
+  } catch (error) {
+    console.error(error)
+    toast(`Kunde inte läsa mappen: ${error.message}`)
+  }
+}
+
+async function addLibraryFiles(files, folders = []) {
+  const known = new Set([...state.library.pdfs, ...state.library.tracks].map(file => file.id))
+  let duplicates = 0
+  for (const folder of folders) if (!state.library.folders.some(item => item.path === folder.path)) state.library.folders.push(folder)
+  for (const file of files) {
+    if (known.has(file.id)) { duplicates += 1; continue }
+    known.add(file.id)
+    const bytes = new Uint8Array(file.bytes)
+    if (/\.pdf$/i.test(file.name)) {
+      state.library.pdfs.push({ ...file, hasGeoData: Boolean(parseGeoPdf(bytes)), size: bytes.byteLength })
+    } else {
+      try {
+        const parsed = /\.trc$/i.test(file.name) ? parseTrcTrack(bytes, file.name) : parseTextTrack(bytesToText(bytes), file.name)
+        state.library.tracks.push({ ...file, parsed, size: bytes.byteLength, loaded: state.logs.some(log => log.sourceId === file.id) })
+      } catch (error) {
+        state.library.tracks.push({ ...file, parsed: null, size: bytes.byteLength, error: error.message, loaded: false })
+      }
+    }
+  }
+  renderFolder()
+  if (duplicates) toast(`${duplicates} identisk${duplicates === 1 ? ' fil' : 'a filer'} hoppades över.`)
+}
+
+function trackFit(track) {
+  if (!state.transform || !state.page || !track?.points?.length) return null
+  let inside = 0
+  for (const point of track.points) {
+    const pixel = geoToPixel(point.lat, point.lon)
+    if (pixel && pixel.x >= 0 && pixel.x <= state.width && pixel.y >= 0 && pixel.y <= state.height) inside += 1
+  }
+  return { inside, total: track.points.length }
+}
+
+function fitText(track) {
+  const fit = trackFit(track)
+  if (!fit) return 'Kartmatchning väntar på geodata'
+  if (fit.inside === 0) return 'Utanför aktiv karta'
+  return `${fit.inside.toLocaleString('sv-SE')} av ${fit.total.toLocaleString('sv-SE')} punkter ryms i kartan`
+}
+
+function renderFolder() {
+  const folder = state.library
+  if (!folder.pdfs.length && !folder.tracks.length) return
+  $('folderPanel').classList.remove('hidden')
+  $('folderName').textContent = folder.folders.length === 1 ? folder.folders[0].name : `${folder.folders.length} mappar`
+  $('folderCount').textContent = `${folder.pdfs.length + folder.tracks.length} filer`
+  $('folderPdfList').innerHTML = folder.pdfs.length ? folder.pdfs.map((file, index) => `
+    <div class="folder-file-card">
+      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.hasGeoData ? 'GeoPDF' : 'Utan geodata'}</i></span></div>
+      <button class="small-button" data-folder-pdf="${index}">Öppna</button>
+    </div>`).join('') : '<p class="empty-list">Inga PDF-filer hittades.</p>'
+  $('folderTrackList').innerHTML = folder.tracks.length ? folder.tracks.map((file, index) => `
+    <div class="folder-file-card ${file.error ? 'invalid' : ''}">
+      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${file.parsed ? `${file.parsed.points.length.toLocaleString('sv-SE')} punkter · ${file.name.split('.').pop().toUpperCase()}<br><i class="file-state ${trackFit(file.parsed)?.inside ? 'geo' : ''}">${fitText(file.parsed)}</i>` : escapeHtml(file.error)}</span></div>
+      <button class="small-button" data-folder-track="${index}" ${file.error ? 'disabled' : ''}>${file.loaded ? 'Ta bort' : 'Lägg till'}</button>
+    </div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
+
+  document.querySelectorAll('[data-folder-pdf]').forEach(button => button.addEventListener('click', () => loadPdfFile(folder.pdfs[Number(button.dataset.folderPdf)])))
+  document.querySelectorAll('[data-folder-track]').forEach(button => button.addEventListener('click', () => toggleFolderTrack(Number(button.dataset.folderTrack))))
+}
+
+function toggleFolderTrack(index) {
+  const file = state.library.tracks[index]
+  if (!file.parsed) return
+  if (file.loaded) {
+    state.logs = state.logs.filter(log => log.folderKey !== file.path)
+    file.loaded = false
+  } else {
+    if (state.logs.some(log => log.sourceId === file.id)) {
+      file.loaded = true
+      renderFolder()
+      return toast('Spåret är redan tillagt.')
+    }
+    const parsed = { ...file.parsed, color: colors[state.logs.length % colors.length], visible: true, folderKey: file.path, sourceId: file.id }
+    state.logs.push(parsed)
+    file.loaded = true
+  }
+  renderFolder(); renderLogs(); drawOverlay()
+}
+
 function updateGeoStatus() {
   const badge = $('geoBadge')
   if (state.transform) {
@@ -175,6 +275,8 @@ function updateGeoStatus() {
   }
   $('clearCalibration').classList.toggle('hidden', state.calibration.length === 0)
   $('calibrationPoints').innerHTML = state.calibration.map((point, index) => `<div class="point-row"><span>Punkt ${index + 1}</span><span>${point.lat.toFixed(6)}, ${point.lon.toFixed(6)}</span></div>`).join('')
+  renderFolder()
+  renderLogs()
 }
 
 function setScale(scale) {
@@ -253,31 +355,46 @@ async function fileBytes(file) {
   return file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
 }
 
+async function contentId(file, bytes) {
+  if (file.id) return file.id
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('')
+}
+
 async function importTrackFiles(files) {
+  let duplicates = 0
   for (const file of files) {
     try {
       const bytes = await fileBytes(file)
+      const id = await contentId(file, bytes)
+      if (state.logs.some(log => log.sourceId === id)) { duplicates += 1; continue }
       const parsed = file.name.toLowerCase().endsWith('.trc') ? parseTrcTrack(bytes, file.name) : parseTextTrack(bytesToText(bytes), file.name)
       parsed.color = colors[state.logs.length % colors.length]
       parsed.visible = true
+      parsed.sourceId = id
       state.logs.push(parsed)
       if (parsed.warnings.length) toast(`${file.name}: ${parsed.warnings.length} rader hoppades över.`)
     } catch (error) { toast(error.message) }
   }
   renderLogs()
   drawOverlay()
+  if (duplicates) toast(`${duplicates} duplicerat spår hoppades över.`)
 }
 
 function renderLogs() {
   $('logsPanel').classList.toggle('hidden', state.logs.length === 0)
   $('applyWaterLevel').classList.toggle('hidden', !state.roxenLevel || state.logs.length === 0)
+  if (state.transform) {
+    const fitting = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0).length
+    $('logsMapSummary').textContent = `${fitting} av ${state.logs.length} spår har punkter som ryms i den aktiva kartan.`
+  } else $('logsMapSummary').textContent = 'Aktivera geodata för att se vilka spår som ryms i kartan.'
   $('logList').innerHTML = state.logs.map((log, index) => {
     const depths = log.points.map(point => correctedDepth(log, point))
     const source = log.waterLevelSource === 'roxen' ? ' · Roxen, Tekniska verken' : ''
     const correction = log.correction == null ? 'Ingen vattenståndskorrigering' : `Vattenstånd ${log.waterLevel.toFixed(2)} m${source} · korrektion −${log.correction.toFixed(2)} m`
     return `<div class="log-card" style="--log-color:${log.color}">
       <label class="log-title"><input class="log-toggle" type="checkbox" data-log="${index}" ${log.visible ? 'checked' : ''}>${log.name}</label>
-      <div class="log-meta">${log.points.length.toLocaleString('sv-SE')} punkter · ${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m<br>${correction}</div>
+      <div class="log-meta">${log.points.length.toLocaleString('sv-SE')} punkter · ${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m<br><strong class="track-fit">${fitText(log)}</strong><br>${correction}</div>
     </div>`
   }).join('')
   document.querySelectorAll('[data-log]').forEach(input => input.addEventListener('change', event => {
@@ -380,6 +497,7 @@ $('clearCalibration').addEventListener('click', () => {
   updateGeoStatus(); drawOverlay()
 })
 $('openPdf').addEventListener('click', openPdf)
+$('openFolder').addEventListener('click', openFolder)
 $('emptyOpenPdf').addEventListener('click', openPdf)
 $('openLogs').addEventListener('click', openLogs)
 $('fetchWaterLevel').addEventListener('click', loadWaterLevel)
@@ -410,12 +528,15 @@ window.addEventListener('drop', async event => {
   dragDepth = 0
   viewportElement.classList.remove('dragging')
   $('dropOverlay').classList.add('hidden')
-  const files = [...event.dataTransfer.files]
-  const pdf = files.find(file => file.name.toLowerCase().endsWith('.pdf'))
-  const tracks = files.filter(file => /\.(txt|csv|trc)$/i.test(file.name))
-  if (!pdf && tracks.length === 0) return toast('Släpp ett fältmanus (PDF) eller mätspår (TXT, CSV eller TRC).')
-  if (pdf) await loadPdfFile(pdf)
-  if (tracks.length) await importTrackFiles(tracks)
+  const entries = [...event.dataTransfer.files]
+  try {
+    const scanned = await window.sjomatning.scanDroppedEntries(entries)
+    if (!scanned.files.length) return toast('Mappen innehåller inga PDF-, TXT-, CSV- eller TRC-filer.')
+    await addLibraryFiles(scanned.files, scanned.folders.map(folder => ({ name: folder.name, path: folder.path })))
+  } catch (error) {
+    console.error(error)
+    toast(`Kunde inte läsa det som släpptes: ${error.message}`)
+  }
 })
 
 window.sjomatning.launchPdf().then(file => {
@@ -423,3 +544,15 @@ window.sjomatning.launchPdf().then(file => {
 })
 
 $('waterLevelDate').value = new Date().toLocaleDateString('sv-SE')
+
+window.sjomatning.onUpdaterStatus(({ status, detail }) => {
+  const messages = {
+    checking: 'Söker efter uppdateringar…', current: 'Programmet är uppdaterat.',
+    available: `Version ${detail} hittades och hämtas…`, downloading: `Hämtar uppdatering: ${detail} %`,
+    ready: `Version ${detail} är klar att installeras.`, error: `Uppdateringskontrollen misslyckades: ${detail}`
+  }
+  $('updateText').textContent = messages[status] || ''
+  $('updateBar').classList.toggle('hidden', !messages[status])
+  $('installUpdate').classList.toggle('hidden', status !== 'ready')
+})
+$('installUpdate').addEventListener('click', () => window.sjomatning.installUpdate())

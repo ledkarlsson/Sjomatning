@@ -14,13 +14,37 @@
         <h1>Sjömätning</h1>
       </div>
       <div class="header-actions">
+        <button id="openFolder" class="button">Öppna mapp</button>
         <button id="openPdf" class="button primary">Öppna fältmanus</button>
         <button id="openLogs" class="button">Lägg till mätspår</button>
       </div>
     </header>
 
+    <div id="updateBar" class="update-bar hidden" aria-live="polite">
+      <span id="updateText"></span>
+      <button id="installUpdate" class="small-button hidden">Starta om och uppdatera</button>
+    </div>
+
     <main class="layout">
       <aside class="sidebar">
+        <section class="panel hidden" id="folderPanel">
+          <div class="panel-heading">
+            <div>
+              <p class="label">PROJEKTMAPP</p>
+              <h2 id="folderName">Importerade mappar</h2>
+            </div>
+            <span id="folderCount" class="badge success"></span>
+          </div>
+          <div class="folder-section">
+            <h3>Fältmanus</h3>
+            <div id="folderPdfList" class="folder-file-list"></div>
+          </div>
+          <div class="folder-section">
+            <h3>Mätspår</h3>
+            <div id="folderTrackList" class="folder-file-list"></div>
+          </div>
+        </section>
+
         <section class="panel intro" id="introPanel">
           <span class="step-number">1</span>
           <div>
@@ -78,6 +102,7 @@
             <div>
               <p class="label">MÄTNINGAR</p>
               <h2>Importerade körningar</h2>
+              <p id="logsMapSummary" class="map-summary"></p>
             </div>
             <span class="step-number small">3</span>
           </div>

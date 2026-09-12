@@ -107,3 +107,9 @@ Min rekommendation är att inte börja med att bygga en ny komplett sjökortsplo
 Appen kan hämta Roxens publicerade dygnsvattenstånd från Tekniska verken. Välj dag i panelen **Vattenstånd** och använd vid behov nivån som korrigering för alla importerade körningar. Värdena anges i RH00 och kräver internetanslutning.
 
 Mätspår kan öppnas med filväljaren eller dras direkt till arbetsytan. Appen stöder SeaClear-spår som TXT/CSV och binära TRC-filer. Äldre waypoint-TXT läses också; där används det okorrigerade värdet efter `Ekolod:` så att appens vattenståndskorrigering inte räknas två gånger.
+
+Med **Öppna mapp** inventerar appen PDF-manus och mätspår även i undermappar. Listan visar vilka manus som har inbäddad geodata samt format, filstorlek och antal punkter för varje spår. Filer öppnas eller läggs till direkt från listan.
+
+Flera mappar kan läggas till med filväljaren eller genom drag-and-drop. Identiska filer identifieras med SHA-256 och importeras bara en gång. När kartan har geodata visar både biblioteket och listan över importerade spår hur många punkter som ryms inom kartan.
+
+Varje push till `main` får en unik version och publiceras automatiskt som en GitHub Release tillsammans med `latest.yml`. Installerade versioner hämtar uppdateringen i bakgrunden och visar en knapp för att starta om och installera när den är klar.
