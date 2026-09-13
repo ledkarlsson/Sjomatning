@@ -206,7 +206,7 @@ async function loadRoxenMap() {
       } catch { /* Sjömärkeslagret kan sakna en enskild ruta. */ }
     } catch { failures += 1 }
   }))
-  $('documentName').textContent = 'Roxen · kostnadsfritt sjökort'
+  $('documentName').textContent = 'Sverige · kostnadsfri översiktskarta'
   $('pageInfo').textContent = 'Översiktskarta · ej för navigation'
   $('geoBadge').textContent = 'Automatisk GPS-karta'
   $('geoBadge').className = 'badge success'
@@ -394,13 +394,25 @@ function setScale(scale) {
   $('zoomValue').textContent = `${Math.round(state.scale * 100)} %`
 }
 
+function updatePanSpace() {
+  wrap.style.margin = `${Math.max(24, viewportElement.clientHeight / 2)}px ${Math.max(24, viewportElement.clientWidth / 2)}px`
+}
+
+function centerView() {
+  viewportElement.scrollTo(
+    wrap.offsetLeft + wrap.offsetWidth / 2 - viewportElement.clientWidth / 2,
+    wrap.offsetTop + wrap.offsetHeight / 2 - viewportElement.clientHeight / 2
+  )
+}
+
 function fitView() {
   if (!state.page) return
   const availableWidth = viewportElement.clientWidth - 52
   const availableHeight = viewportElement.clientHeight - 52
   state.fitScale = Math.min(availableWidth / state.width, availableHeight / state.height)
+  updatePanSpace()
   setScale(state.fitScale)
-  viewportElement.scrollTo(0, 0)
+  centerView()
 }
 
 function depthColor(depth, min, max) {
@@ -678,7 +690,11 @@ $('toggleLibrary').addEventListener('click', () => {
 $('zoomIn').addEventListener('click', () => setScale(state.scale * 1.2))
 $('zoomOut').addEventListener('click', () => setScale(state.scale / 1.2))
 $('fitView').addEventListener('click', fitView)
-window.addEventListener('resize', () => { if (state.page && Math.abs(state.scale - state.fitScale) < .02) fitView() })
+window.addEventListener('resize', () => {
+  if (!state.page) return
+  if (Math.abs(state.scale - state.fitScale) < .02) fitView()
+  else updatePanSpace()
+})
 
 viewportElement.addEventListener('wheel', event => {
   if (!state.page) return

@@ -106,6 +106,8 @@ Python passar bra eftersom Jonas efterbehandling redan är skriven där. En lite
 Min rekommendation är att inte börja med att bygga en ny komplett sjökortsplotter. Bygg en robust ”svart låda” för rådata först och låt SeaClear/OpenCPN hantera kartvisningen under den första säsongen. När loggningen är bevisat stabil kan fältmanuset byggas in.
 Appen kan hämta Roxens publicerade dygnsvattenstånd från Tekniska verken. Välj dag i panelen **Vattenstånd** och använd vid behov nivån som korrigering för alla importerade körningar. Värdena anges i RH00 och kräver internetanslutning.
 
+Den inbyggda kostnadsfria översiktskartan täcker hela Sverige med data från OpenStreetMap och OpenSeaMap. Använd mushjulet för att zooma och dra med vänster musknapp för att panorera åt valfritt håll.
+
 Mätspår kan öppnas med filväljaren eller dras direkt till arbetsytan. Appen stöder SeaClear-spår som TXT/CSV och binära TRC-filer. Äldre waypoint-TXT läses också; där används det okorrigerade värdet efter `Ekolod:` så att appens vattenståndskorrigering inte räknas två gånger.
 
 Flera körningar kan visas samtidigt med egna färger. Varje körning har separat vattennivå, manuell djupjustering och valfritt gallringsavstånd. Gallringen följer Pythonunderlagets princip: punkterna glesas till önskat avstånd, samtidigt som en grundaste mellanpunkt behålls när den är viktig. Råpunkterna ändras aldrig. Synliga spår kan exporteras tillsammans som semikolonavgränsad CSV eller som SeaClear-kompatibel waypoint-TXT.

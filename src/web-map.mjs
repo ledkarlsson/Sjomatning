@@ -1,11 +1,11 @@
-export const ROXEN_BOUNDS = Object.freeze({
-  north: 58.585,
-  south: 58.405,
-  west: 15.32,
-  east: 15.88
+export const SWEDEN_BOUNDS = Object.freeze({
+  north: 69.1,
+  south: 55.2,
+  west: 10.4,
+  east: 24.3
 })
 
-export const ROXEN_TILE_ZOOM = 12
+export const SWEDEN_TILE_ZOOM = 6
 
 function clampLatitude(latitude) {
   return Math.max(-85.05112878, Math.min(85.05112878, latitude))
@@ -25,7 +25,7 @@ export function worldYToLat(y, zoom) {
   return Math.atan(Math.sinh(n)) * 180 / Math.PI
 }
 
-export function createWebMap(bounds = ROXEN_BOUNDS, zoom = ROXEN_TILE_ZOOM) {
+export function createWebMap(bounds = SWEDEN_BOUNDS, zoom = SWEDEN_TILE_ZOOM) {
   const left = lonToWorldX(bounds.west, zoom)
   const right = lonToWorldX(bounds.east, zoom)
   const top = latToWorldY(bounds.north, zoom)
