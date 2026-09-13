@@ -203,3 +203,14 @@ dialog > form { text-align: right; }
 .instrument-settings { margin: 10px 0; }
 .folder-file-card { flex-direction: column; align-items: stretch; gap: 8px; }
 .file-actions { justify-content: flex-start; }
+
+.floating-tracks { position: absolute; right: 16px; bottom: 28px; z-index: 6; width: min(380px, calc(100% - 32px)); max-height: 55%; overflow: auto; margin: 0; box-shadow: 0 4px 22px #16302b35; }
+.log-title { overflow-wrap: anywhere; }
+.log-toggle { width: auto; flex-shrink: 0; }
+.track-legend { position: absolute; left: 16px; top: 16px; z-index: 5; max-width: min(310px, 45%); max-height: 30%; overflow: auto; padding: 10px 12px; background: #fffffff2; border-radius: 8px; box-shadow: 0 2px 12px #0002; font-size: 11px; }
+.track-legend div { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.track-legend i { width: 16px; height: 4px; flex-shrink: 0; }
+.track-legend span { overflow-wrap: anywhere; }
+.workspace { grid-template-rows: auto minmax(0, 1fr); }
+.toolbar { flex-wrap: wrap; min-height: 48px; gap: 4px; }
+.tool-group { flex-wrap: wrap; gap: 3px; }

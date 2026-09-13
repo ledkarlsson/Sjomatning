@@ -30,7 +30,7 @@ function createWindow() {
     minWidth: 1050,
     minHeight: 680,
     backgroundColor: '#eef3f1',
-    title: `Sjömätning ${app.getVersion()} · programmet uppdaterades senast ${packageMetadata.buildDate}`,
+    title: `Sjömätning v${app.getVersion()} - ${packageMetadata.buildDate}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

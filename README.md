@@ -227,40 +227,16 @@ Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) va
 
 ## Att göra – genomfört 2026-09-13
 
-- [x] Gör det möjligt att redigera namn på filer i biblioteket.
-- [x] Byt namn "GPS och ekolod via USB", det behöver inte vara usb.
-- [x] Djup och fart borde stå tydligare, i själva kartan, när signalen fås.
-- [x] inställningar som hastighet och djup, lägg in dem i ett kugghjul istället i panelen.
-- [x] För fältmanus, "Öppna" behövs inte längre, bara "visa i kartan", som ska heta "Gå till plats" istället.
-- [x] För spår, lägg till knapp för att visa / dölja alla spår. Lägg till ska bytas ut mot visa.
-- [x] Om man klickar på ett spår, ska man få upp info om det spåret. Det ska kunna gå att ändra djupet på spåret.
-- [x] På något sätt vill jag kunna jämföra spår från två eller fler. Vissa båtar har lite olika kalibreringar. ge ett verktyg som på något sätt visar dem. Kanske också att man, typ som i en tabell, kan direkt ändra vissa positioner.
-- [x] Stöd för att visa flera spår: Inför knapp som gör att olika spår får olika färger. Den ska alltså växla mellan färger för djup, och olika spår.
-- [x] Finns det fler ekolodsformat vi kan använda? Kolla testdata/format.
-- [x] När man ändrar i ett spår. Spara en originalkopia, som när som helst kan återställa det modifierade spåret.
-- [x] UI-grej: Övriga spår ska inte synas, om alla är övriga.
-- [x] för spår, "ryms i kartan" ska vara baserad på inzoomningsnivån i kartan. uppdatera det dynamiskt.
-- [x] Vid export till csv blir åäö konstiga.
-- [x] Lägg till, förutom RH00, det som vi kom överens med hydrographica om, 33.0m
-- [x] ROXEN Vattenstånd, samma rad. Ta bort ikon. Ta bort hämta knapp, så fort datum valts ska den hämta.
-- [x] 30 sparade filer, texten kan tas bort. den finns redan i grönt.
-- [x] Roxen vattenstånd. gör den kollapsbar, skriv ut bara senaste värdet i kollapsat tillstånd.
-- [x] Simulerat båttur, gör den till en egen panel, kollapsbar.
-- [x] Ta bort samtliga knappar "visa roxen", Öppna mapp, Öppna fältmanus, Lägg till mätspår. Lägg istället till en "lägg till" knapp i bibliotekpanelen. Man ska kunna dra och släppa rakt in i bibliotekspanelen. uppdatera hjälptexten.
+- [x] Visa inte filändelsen i kartan för fältmanus.
+- [x] FÄLTVERKTYG längst upp kan tas bort. Titeln Sjömätning v0.2.20 · uppdaterades senast 2026-09-13, räcker. Ta med v0.2.20 - 2026-09-13 i titeln enbart.
+- [x] Anpassa knappen är otydlig, byt namn på den.
+- [x] När man klickar så att man ser färg på spår för att jämföra, ha en legend bredvid någonstans som visar vad som är vad. På kartan då.
+- [x] De som heter "importerade spår" är svåröverskådlig. Dessutom har den duplicerad information, då samma info finns i "spår".  Lägg till en knapp visa/dölj spår bredvid "anpassa", där det också står hur många spår som är i bild. När man klickat på visa spår, då ska dessa spår dyka upp som "importerade körningar, i en losskopplad panel ner till höger.
+- [x] I panelen importerade körningar. Ta bort namnet Importerade körningar.  Ta bort Vattenstånd 33.31 m · korrektion -0.31 m. Lägg till info i frågetecknet om att vattennivån kommer från tekniska verken, och att datumet gissas från filen.
+- [x] När jag håller musen över en mätpunkt. Skriv inte ut knop om det är 0.0. Lägg in klockslag om det finns, bredvid datumet. Skriv ut filnamnet i förkortat form som en brurik på det. Skriv ut Long och lat.
+- [x] Vid jämför synliga spår, visa inte spår som inte har matchande punkter. Sortera listan på antal matchande punkter.
+- [x] I panelen mätningar, där ska det stå: visa spår synliga i kartan
 
-
-### Användning av de nya verktygen
-
-Bibliotekets **Lägg till** samlar fil- och mappval. Dra även filer eller hela mappar direkt till biblioteket. **Byt namn** ändrar det sparade visningsnamnet; filens originalinnehåll och metadata från dess ursprungliga namn bevaras. Fältmanus har en enda **Gå till plats**-knapp.
-
-**Visa alla** och **Dölj alla** styr spåren. **Färg: djup / Färg: spår** växlar färgsättning. Kartmatchningen räknar punkter i det synliga utsnittet och uppdateras efter zoom, panorering och storleksändring. Rubriken Övriga spår visas bara när några spår faktiskt matchar utsnittet.
-
-Klicka på en mätpunkt i kartan för spårets information och punkttabell. Tabellen visar 100 punkter per sida och kan ändra koordinater, rådjup och hela spårets djupjustering. Ändringarna sparas separat i biblioteket och överlever omstart. Originalfilen är den beständiga originalkopian och skrivs aldrig över. **Återställ original** tar bort punktändringar, gallring och manuella justeringar. Bibliotekets borttagningsknapp tar däremot bort både originalet och dess ändringar.
-
-**Jämför synliga spår** jämför två eller fler spår mot en vald referens. Verktyget matchar närmaste referenspunkt inom en inställbar radie (standard 10 meter) och visar antal matchningar samt medianen av korrigerade djupskillnader. En positiv skillnad betyder djupare än referensen. Samma referenspunkt kan matchas flera gånger. Skillnader kan bero på både kalibrering och bottenlutning; inga justeringar görs automatiskt. Öppna tabellen från jämförelsen för att ändra punkter eller djupjustering.
-
-Instrumentets baudrate och givarjustering finns under **⚙ Inställningar**. Djup och fart visas stort på kartan under mätning; värden äldre än fem sekunder visas som streck. Vattenstånd hämtas automatiskt när datum ändras. Panelen visar RH00 samt avvikelsen från Hydrographicas referensnivå **33,00 m RH00** (vattenstånd minus 33,00). Vattenstånd och simulator har egna kollapsbara paneler. CSV-export använder UTF-8 med BOM så att svenska tecken identifieras korrekt i Excel.
-
-Lowrance **SL2 och SL3** kan nu läggas till som spår. Se [formatkontroll och begränsningar](docs/ekolodsformat.md) för provresultat och exakt importomfattning.
+Knappen **Visa hela kartan** återställer Roxenöversikten eller passar in det öppna PDF-manuset. **Visa/dölj spår** öppnar och stänger panelen nere till höger; antalet anger visade spår med punkter i kartutsnittet. Panelens kryssrutor styr spårens synlighet. **Visa spår synliga i kartan** i mätpanelen öppnar samma panel. Färglegenden visar synliga spår i utsnittet när **Färg: spår** är valt. Jämförelser sorteras med flest matchningar först. Version och byggdatum hämtas från det aktuella bygget.
 
 UI-regressioner körs med `npm run test:map-ui` och `npm run test:library-ui`. De kör den riktiga Electron-renderaren med isolerade testdata och simulerade externa tjänster. Karttestets GeoPDF-prov kräver den lokala filen i `testdata/fältmanus-geodata/`.

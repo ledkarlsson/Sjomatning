@@ -18,6 +18,9 @@ const waterLevelRequests = new Map()
 let manuscriptOffset = { x: 0, y: 0 }
 let showManuscripts = false
 let trackColors = false
+let tracksPanelOpen = false
+const manuscriptName = name => name.replace(/\.pdf$/i, '')
+const shortTrackName = name => name.length > 42 ? name.slice(0, 26) + '…' + name.slice(-15) : name
 let fitTimer
 function refreshFits() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { renderFolder(); renderLogs() }, 180) }
 
@@ -260,8 +263,8 @@ function drawManuscripts(context, map) {
     context.font = '12px sans-serif'
     const labelX = Math.max(4, Math.min(map.width - 160, corners[0].x))
     const labelY = Math.max(18, Math.min(map.height - 4, corners[0].y))
-    context.fillStyle = '#ffffff'; context.fillRect(labelX-2,labelY-14,context.measureText(file.name).width+8,18)
-    context.fillStyle = color; context.fillText(file.name,labelX+2,labelY)
+    context.fillStyle = '#ffffff'; context.fillRect(labelX-2,labelY-14,context.measureText(manuscriptName(file.name)).width+8,18)
+    context.fillStyle = color; context.fillText(manuscriptName(file.name),labelX+2,labelY)
     context.restore()
   })
 }
@@ -639,22 +642,25 @@ async function applyAutomaticWaterLevel(log) {
 }
 
 function renderLogs() {
-  $('logsPanel').classList.toggle('hidden', state.logs.length === 0)
+  $('logsPanel').classList.toggle('hidden', !tracksPanelOpen)
+  const fittingLogs = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0)
+  $('toggleTracksPanel').textContent = `${tracksPanelOpen ? 'Dölj' : 'Visa'} spår (${fittingLogs.filter(log => log.visible).length} i bild)`
+  $('toggleTracksPanel').setAttribute('aria-expanded', String(tracksPanelOpen))
+  renderTrackLegend()
   $('applyWaterLevel').classList.toggle('hidden', !state.roxenLevel || state.logs.length === 0)
   if (state.transform) {
     const fitting = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0).length
     $('logsMapSummary').textContent = `${fitting} av ${state.logs.length} spår har punkter som ryms i den aktiva kartan.`
   } else $('logsMapSummary').textContent = 'Aktivera geodata för att se vilka spår som ryms i kartan.'
   $('logList').innerHTML = state.logs.map((log, index) => {
+    if (!fittingLogs.includes(log)) return ''
     const visiblePoints = processedPoints(log)
     const depths = visiblePoints.map(point => correctedDepth(log, point))
     const depthRange = depths.length ? `${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m` : 'Inga punkter'
-    const source = log.waterLevelSource === 'roxen' ? ' · Roxen, Tekniska verken' : ''
-    const correction = log.correction == null ? 'Ingen vattenståndskorrigering' : `Vattenstånd ${log.waterLevel.toFixed(2)} m${source} · korrektion ${(-log.correction).toFixed(2)} m`
     const adjustment = log.depthAdjustment ? ` · extra justering ${log.depthAdjustment > 0 ? '+' : ''}${log.depthAdjustment.toFixed(2)} m` : ''
     return `<div class="log-card" style="--log-color:${log.color}">
       <label class="log-title"><input class="log-toggle" type="checkbox" data-log="${index}" ${log.visible ? 'checked' : ''}>${escapeHtml(log.name)}</label>
-      <div class="log-meta">${visiblePoints.length.toLocaleString('sv-SE')} av ${log.points.length.toLocaleString('sv-SE')} punkter · ${depthRange}<br><strong class="track-fit">${fitText(log)}</strong><br>${correction}${adjustment}</div>
+      <div class="log-meta">${visiblePoints.length.toLocaleString('sv-SE')} av ${log.points.length.toLocaleString('sv-SE')} punkter · ${depthRange}<br><strong class="track-fit">${fitText(log)}</strong>${adjustment}</div>
       <div class="log-controls">
         <label>Vattennivå (m)<input type="number" step="0.01" data-water-level="${index}" value="${log.waterLevel == null ? '' : log.waterLevel.toFixed(2)}" placeholder="33.00"></label>
         <label>Djupjustering (m)<input type="number" step="0.01" data-depth-adjustment="${index}" value="${(log.depthAdjustment || 0).toFixed(2)}"></label>
@@ -666,7 +672,7 @@ function renderLogs() {
   }).join('')
   document.querySelectorAll('[data-log]').forEach(input => input.addEventListener('change', event => {
     state.logs[Number(event.target.dataset.log)].visible = event.target.checked
-    renderFolder(); drawOverlay()
+    renderFolder(); renderLogs(); drawOverlay()
   }))
   document.querySelectorAll('[data-table-log]').forEach(button => button.onclick = () => showTrackEditor(Number(button.dataset.tableLog)))
   document.querySelectorAll('[data-restore-log]').forEach(button => button.onclick = () => restoreTrack(Number(button.dataset.restoreLog)))
@@ -798,7 +804,7 @@ overlay.addEventListener('mousemove', event => {
     }
   })
   if (nearest) {
-    $('tooltip').innerHTML = `<strong>${correctedDepth(nearest.log, nearest.point).toFixed(2)} m</strong><br>${nearest.point.date} ${nearest.point.time}<br>${nearest.point.speed.toFixed(1)} knop`
+    $('tooltip').innerHTML = `<strong>${escapeHtml(shortTrackName(nearest.log.name))}</strong><br>${correctedDepth(nearest.log, nearest.point).toFixed(2)} m<br>${escapeHtml([nearest.point.date, nearest.point.time].filter(Boolean).join(' '))}<br>Lat: ${nearest.point.lat.toFixed(6)} · Long: ${nearest.point.lon.toFixed(6)}${Number.isFinite(nearest.point.speed) && nearest.point.speed.toFixed(1) !== '0.0' ? '<br>' + nearest.point.speed.toFixed(1) + ' knop' : ''}`
     $('tooltip').style.left = `${event.clientX + 14}px`; $('tooltip').style.top = `${event.clientY + 14}px`
     $('tooltip').classList.remove('hidden')
   } else $('tooltip').classList.add('hidden')
@@ -963,9 +969,9 @@ loadRoxenMap().catch(error => {
 })
 
 window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
-  const title = `Sjömätning ${version} · programmet uppdaterades senast ${buildDate}`
+  const title = `Sjömätning v${version} - ${buildDate}`
   document.title = title
-  $('buildInfo').textContent = `v${version} · uppdaterades senast ${buildDate}`
+  $('buildInfo').textContent = `v${version} - ${buildDate}`
 })
 
 if (localStorage.getItem('library:collapsed') === 'true') {
@@ -1202,13 +1208,12 @@ function showComparison() {
     const radius = Number($('comparisonRadius').value)
     if (!Number.isFinite(radius) || radius < 1 || radius > 100) return
     const reference = tracks[Number($('referenceTrack').value)]
-    const rows = tracks.filter(log => log !== reference).map(log => {
-      const pairs = compareTrackPoints(reference, log, radius)
+    const rows = tracks.filter(log => log !== reference).map(log => ({ log, pairs: compareTrackPoints(reference, log, radius) })).filter(result => result.pairs.length > 0).sort((a, b) => b.pairs.length - a.pairs.length).map(({ log, pairs }) => {
       const deltas = pairs.map(pair => pair.delta).sort((a,b) => a-b)
       const median = deltas.length ? (deltas[Math.floor((deltas.length-1)/2)] + deltas[Math.floor(deltas.length/2)]) / 2 : null
       return `<tr><td>${escapeHtml(log.name)}</td><td>${pairs.length}</td><td>${median == null ? 'Inga närliggande punkter' : median.toFixed(2) + ' m'}</td><td><button class="small-button" data-compare-edit="${state.logs.indexOf(log)}">Redigera punkter / justering</button></td></tr>`
     })
-    $('comparisonResults').innerHTML = `<table><thead><tr><th>Spår</th><th>Matchade punkter</th><th>Median djupskillnad</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table><p>Skillnaderna använder aktuella vattenstånds- och djupjusteringar, före gallring. Varje punkt matchas en gång; samma referenspunkt kan användas flera gånger.</p>`
+    $('comparisonResults').innerHTML = `<table><thead><tr><th>Spår</th><th>Matchade punkter</th><th>Median djupskillnad</th><th></th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="4">Inga matchande punkter inom vald radie.</td></tr>'}</tbody></table><p>Skillnaderna använder aktuella vattenstånds- och djupjusteringar, före gallring. Varje punkt matchas en gång; samma referenspunkt kan användas flera gånger.</p>`
     document.querySelectorAll('[data-compare-edit]').forEach(button => button.onclick = () => showTrackEditor(Number(button.dataset.compareEdit)))
   }
   $('referenceTrack').onchange = $('comparisonRadius').onchange = calculate
@@ -1244,6 +1249,20 @@ $('colorMode').onclick = () => {
   $('colorMode').textContent = trackColors ? 'Färg: spår' : 'Färg: djup'
   $('colorMode').setAttribute('aria-pressed', String(trackColors))
   document.querySelector('.depth-legend').classList.toggle('hidden', trackColors)
+  renderTrackLegend()
   drawOverlay()
 }
 $('compareTracks').onclick = showComparison
+
+function renderTrackLegend() {
+  const logs = state.logs.filter(log => log.visible && (trackFit(log)?.inside || 0) > 0)
+  $('trackLegend').classList.toggle('hidden', !trackColors || !logs.length)
+  $('trackLegend').innerHTML = logs.map(log => `<div title="${escapeHtml(log.name)}"><i style="background:${log.color}"></i><span>${escapeHtml(shortTrackName(log.name))}</span></div>`).join('')
+}
+function setTracksPanel(open) {
+  tracksPanelOpen = open
+  renderLogs()
+}
+$('toggleTracksPanel').onclick = () => setTracksPanel(!tracksPanelOpen)
+$('showTracksPanel').onclick = () => setTracksPanel(true)
+$('closeTracksPanel').onclick = () => setTracksPanel(false)
