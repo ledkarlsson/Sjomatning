@@ -644,8 +644,9 @@ async function applyAutomaticWaterLevel(log) {
 function renderLogs() {
   $('logsPanel').classList.toggle('hidden', !tracksPanelOpen)
   const fittingLogs = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0)
-  $('toggleTracksPanel').textContent = `${tracksPanelOpen ? 'Dölj' : 'Visa'} spår (${fittingLogs.filter(log => log.visible).length} i bild)`
-  $('toggleTracksPanel').setAttribute('aria-expanded', String(tracksPanelOpen))
+  $('toggleTracksPanel').textContent = `${state.logs.some(log => log.visible) ? 'Dölj' : 'Visa'} spår (${fittingLogs.filter(log => log.visible).length} i bild)`
+  $('toggleTracksPanel').setAttribute('aria-pressed', String(state.logs.some(log => log.visible)))
+  $('openTracksPanel').setAttribute('aria-expanded', String(tracksPanelOpen))
   renderTrackLegend()
   $('applyWaterLevel').classList.toggle('hidden', !state.roxenLevel || state.logs.length === 0)
   if (state.transform) {
@@ -872,6 +873,7 @@ new ResizeObserver(() => {
 }).observe(viewportElement)
 
 viewportElement.addEventListener('wheel', event => {
+  if (event.target.closest('.panel, .track-legend')) return
   if (!state.page) return
   event.preventDefault()
   const point = canvasPoint(event)
@@ -887,7 +889,7 @@ let pan = null
 let suppressClick = false
 viewportElement.addEventListener('pointerdown', event => {
   if (event.button !== 0 || !state.page) return
-  if (event.target.closest('a, button')) return
+  if (event.target.closest('a, button, input, select, .panel, .track-legend')) return
   suppressClick = false
   pan = { offset: { ...manuscriptOffset }, map: state.map, pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewportElement.scrollLeft, scrollTop: viewportElement.scrollTop, moved: false }
   // Capture only after dragging starts so ordinary canvas clicks keep their target.
@@ -1231,7 +1233,7 @@ setInterval(updateMapReadout, 1000)
 $('addLibrary').onclick = () => $('addDialog').showModal()
 $('addFiles').onclick = async () => { $('addDialog').close(); try { await addLibraryFiles(await window.sjomatning.openLibrary()) } catch(error) { toast(error.message) } }
 $('addFolder').onclick = () => { $('addDialog').close(); openFolder() }
-$('showAllTracks').onclick = async () => {
+async function showAllTracks() {
   $('showAllTracks').disabled = true
   try {
     for (let i = 0; i < state.library.tracks.length; i++) {
@@ -1243,7 +1245,9 @@ $('showAllTracks').onclick = async () => {
     renderFolder(); renderLogs(); drawOverlay()
   } finally { $('showAllTracks').disabled = false }
 }
-$('hideAllTracks').onclick = () => { state.logs.forEach(log => { log.visible = false }); renderFolder(); renderLogs(); drawOverlay() }
+function hideAllTracks() { state.logs.forEach(log => { log.visible = false }); renderFolder(); renderLogs(); drawOverlay() }
+$('showAllTracks').onclick = showAllTracks
+$('hideAllTracks').onclick = hideAllTracks
 $('colorMode').onclick = () => {
   trackColors = !trackColors
   $('colorMode').textContent = trackColors ? 'Färg: spår' : 'Färg: djup'
@@ -1254,15 +1258,26 @@ $('colorMode').onclick = () => {
 }
 $('compareTracks').onclick = showComparison
 
+function eyeIcon(visible) {
+  return `<svg class="eye-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${visible ? '' : '<path d="M3 3l18 18"/>'}</svg>`
+}
 function renderTrackLegend() {
-  const logs = state.logs.filter(log => log.visible && (trackFit(log)?.inside || 0) > 0)
+  const logs = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0)
   $('trackLegend').classList.toggle('hidden', !trackColors || !logs.length)
-  $('trackLegend').innerHTML = logs.map(log => `<div title="${escapeHtml(log.name)}"><i style="background:${log.color}"></i><span>${escapeHtml(shortTrackName(log.name))}</span></div>`).join('')
+  $('trackLegend').innerHTML = `<div class="legend-actions"><button id="legendShowAll" class="small-button">${eyeIcon(true)}Visa alla</button><button id="legendHideAll" class="small-button">${eyeIcon(false)}Dölj alla</button></div>` + logs.map(log => `<button class="legend-track ${log.visible ? '' : 'muted-track'}" data-legend-track="${state.logs.indexOf(log)}" title="${escapeHtml(log.name)}" aria-label="${log.visible ? 'Dölj' : 'Visa'} ${escapeHtml(log.name)}" aria-pressed="${log.visible}">${eyeIcon(log.visible)}<i style="background:${log.color}"></i><span>${escapeHtml(shortTrackName(log.name))}</span></button>`).join('')
+  $('legendShowAll').onclick = showAllTracks
+  $('legendHideAll').onclick = hideAllTracks
+  $('trackLegend').querySelectorAll('[data-legend-track]').forEach(button => button.onclick = () => {
+    const log = state.logs[Number(button.dataset.legendTrack)]
+    log.visible = !log.visible
+    renderFolder(); renderLogs(); drawOverlay()
+  })
 }
 function setTracksPanel(open) {
   tracksPanelOpen = open
   renderLogs()
 }
-$('toggleTracksPanel').onclick = () => setTracksPanel(!tracksPanelOpen)
+$('toggleTracksPanel').onclick = () => state.logs.some(log => log.visible) ? hideAllTracks() : showAllTracks()
+$('openTracksPanel').onclick = () => setTracksPanel(!tracksPanelOpen)
 $('showTracksPanel').onclick = () => setTracksPanel(true)
 $('closeTracksPanel').onclick = () => setTracksPanel(false)

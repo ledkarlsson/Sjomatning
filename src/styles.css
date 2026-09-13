@@ -214,3 +214,11 @@ dialog > form { text-align: right; }
 .workspace { grid-template-rows: auto minmax(0, 1fr); }
 .toolbar { flex-wrap: wrap; min-height: 48px; gap: 4px; }
 .tool-group { flex-wrap: wrap; gap: 3px; }
+
+.sidebar, .floating-tracks, .track-legend { overscroll-behavior: contain; }
+.legend-track { display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0; padding: 5px 2px; border: 0; background: transparent; color: var(--ink); text-align: left; font-size: 11px; }
+.legend-track:hover { background: var(--mint); }
+.legend-track.muted-track { color: #7a827f; }
+.legend-track.muted-track i { opacity: .3; }
+.eye-icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.legend-actions .small-button { display: inline-flex; align-items: center; gap: 4px; }

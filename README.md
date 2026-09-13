@@ -237,6 +237,8 @@ Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) va
 - [x] Vid jämför synliga spår, visa inte spår som inte har matchande punkter. Sortera listan på antal matchande punkter.
 - [x] I panelen mätningar, där ska det stå: visa spår synliga i kartan
 
-Knappen **Visa hela kartan** återställer Roxenöversikten eller passar in det öppna PDF-manuset. **Visa/dölj spår** öppnar och stänger panelen nere till höger; antalet anger visade spår med punkter i kartutsnittet. Panelens kryssrutor styr spårens synlighet. **Visa spår synliga i kartan** i mätpanelen öppnar samma panel. Färglegenden visar synliga spår i utsnittet när **Färg: spår** är valt. Jämförelser sorteras med flest matchningar först. Version och byggdatum hämtas från det aktuella bygget.
+Knappen **Visa hela kartan** återställer Roxenöversikten eller passar in det öppna PDF-manuset. **Visa/dölj spår** visar eller döljer alla spår. **Spårpanel** öppnar och stänger panelen nere till höger; antalet anger visade spår med punkter i kartutsnittet. Panelens kryssrutor styr spårens synlighet. **Visa spår synliga i kartan** i mätpanelen öppnar samma panel. Färglegenden visar synliga spår i utsnittet när **Färg: spår** är valt. Jämförelser sorteras med flest matchningar först. Version och byggdatum hämtas från det aktuella bygget.
 
 UI-regressioner körs med `npm run test:map-ui` och `npm run test:library-ui`. De kör den riktiga Electron-renderaren med isolerade testdata och simulerade externa tjänster. Karttestets GeoPDF-prov kräver den lokala filen i `testdata/fältmanus-geodata/`.
+
+Spårlegenden är klickbar: klicka på ett namn för att dölja eller visa spåret. Dolda spår ligger kvar med grå text och överstruket öga. **Visa alla** och **Dölj alla** i legenden styr alla spår. Mushjulet skrollar paneler med scrollbar utan att zooma kartan.
