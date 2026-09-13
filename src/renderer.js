@@ -1,3 +1,5 @@
+import { readRasterChart, rasterPixels } from './raster-chart.mjs'
+import { buildPointIndex, countPoints, viewPoints } from './track-view.mjs'
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack, parseLowranceTrack } from './track-parser.mjs'
 import { ROXEN_BOUNDS, SWEDEN_BOUNDS, fitBounds, viewportMap, panMap, zoomMap, visibleTiles, geoToMapPixel, mapPixelToGeo } from './web-map.mjs'
@@ -19,7 +21,7 @@ let manuscriptOffset = { x: 0, y: 0 }
 let showManuscripts = false
 let trackColors = false
 let tracksPanelOpen = false
-const manuscriptName = name => name.replace(/\.pdf$/i, '')
+const manuscriptName = name => name.replace(/\.(pdf|kap|wci)$/i, '')
 const shortTrackName = name => name.length > 42 ? name.slice(0, 26) + '…' + name.slice(-15) : name
 let fitTimer
 function refreshFits() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { renderFolder(); renderLogs() }, 180) }
@@ -190,6 +192,13 @@ async function manuscriptRaster(file) {
   file.mapRasterLoading = true
   let loadingTask
   try {
+    if (file.chart) {
+      const pixels = await rasterPixels(file.chart)
+      const canvas = document.createElement('canvas'); canvas.width = pixels.width; canvas.height = pixels.height
+      canvas.getContext('2d').putImageData(new ImageData(pixels.rgba, pixels.width, pixels.height), 0, 0)
+      file.mapRaster = { canvas, crop: { x: 0, y: 0, width: canvas.width, height: canvas.height } }
+      return file.mapRaster
+    }
     loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(file.bytes).slice() })
     const pdf = await loadingTask.promise
     const page = await pdf.getPage(1)
@@ -219,6 +228,7 @@ async function manuscriptRaster(file) {
 }
 
 function manuscriptGeometry(file) {
+  if (file.chart) return file.chart.geometry
   const points = parseGeoPdf(new Uint8Array(file.bytes))
   if (!points) return null
   const t = affineFit(points.map(p => ({ x: p.nx, y: 1 - p.ny, lat: p.lat, lon: p.lon })))
@@ -227,18 +237,21 @@ function manuscriptGeometry(file) {
 }
 
 function drawManuscripts(context, map) {
+  const renderedCharts = []
   state.library.pdfs.forEach((file, index) => {
     if (!file.hasGeoData) return
     const geo = file.mapGeometry || (file.mapGeometry = manuscriptGeometry(file))
     if (!geo) return
     const project = (x, y) => { const p = geo(x, y); return geoToMapPixel(map, p.lat, p.lon) }
-    const corners = [[0,0], [1,0], [1,1], [0,1]].map(p => project(...p))
+    const corners = file.chart?.boundary.length >= 3 ? file.chart.boundary.map(p=>geoToMapPixel(map,p.lat,p.lon)) : [[0,0], [1,0], [1,1], [0,1]].map(p => project(...p))
     if (Math.max(...corners.map(p => p.x)) < 0 || Math.min(...corners.map(p => p.x)) > map.width || Math.max(...corners.map(p => p.y)) < 0 || Math.min(...corners.map(p => p.y)) > map.height) return
     const color = colors[index % colors.length]
     context.save()
     if (showManuscripts && !file.mapRaster) void manuscriptRaster(file)
     if (showManuscripts && file.mapRaster) {
+      renderedCharts.push(file.id)
       const { canvas, crop } = file.mapRaster
+      context.save(); context.beginPath(); corners.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y)); context.closePath(); context.clip()
       // Subdivide to follow Mercator curvature as well as rotated manuscript edges.
       const steps = 12
       for (let row = 0; row < steps; row++) for (let col = 0; col < steps; col++) {
@@ -255,6 +268,7 @@ function drawManuscripts(context, map) {
         }
       }
     }
+    if (showManuscripts && file.mapRaster) context.restore()
     context.beginPath()
     corners.forEach((p,i) => i ? context.lineTo(p.x,p.y) : context.moveTo(p.x,p.y))
     context.closePath()
@@ -267,6 +281,7 @@ function drawManuscripts(context, map) {
     context.fillStyle = color; context.fillText(manuscriptName(file.name),labelX+2,labelY)
     context.restore()
   })
+  pdfCanvas.dataset.rasterCharts = renderedCharts.join(',')
 }
 
 const tileCache = new Map()
@@ -390,7 +405,11 @@ async function addLibraryFiles(files, folders = [], quiet = false) {
     if (known.has(file.id)) { duplicates += 1; continue }
     known.add(file.id)
     const bytes = new Uint8Array(file.bytes)
-    if (/\.pdf$/i.test(file.name)) {
+    if (/\.bsb$/i.test(file.name)) continue
+    if (/\.(kap|wci)$/i.test(file.name)) {
+      try { const chart = readRasterChart(bytes, file.name); state.library.pdfs.push({ ...file, chart, hasGeoData: true, size: bytes.byteLength }) }
+      catch (error) { state.library.pdfs.push({ ...file, hasGeoData: false, size: bytes.byteLength, error: error.message }); toast(`${file.name}: ${error.message}`) }
+    } else if (/\.pdf$/i.test(file.name)) {
       state.library.pdfs.push({ ...file, hasGeoData: Boolean(parseGeoPdf(bytes)), size: bytes.byteLength })
     } else {
       try {
@@ -407,17 +426,30 @@ async function addLibraryFiles(files, folders = [], quiet = false) {
   if (duplicates && !quiet) toast(`${duplicates} identisk${duplicates === 1 ? ' fil' : 'a filer'} hoppades över.`)
 }
 
+const pointIndexes = new WeakMap()
+function pointIndex(track, processed=false) {
+  let cached=pointIndexes.get(track)
+  if(!cached || cached.source!==track.points || cached.length!==track.points.length || cached.prune!==track.pruneDistance) {
+    cached={source:track.points,length:track.points.length,prune:track.pruneDistance,raw:buildPointIndex(track.points)}
+    pointIndexes.set(track,cached)
+  }
+  if(!processed || !track.pruneDistance) return cached.raw
+  return cached.processed ||= buildPointIndex(processedPoints(track))
+}
+function visibleBounds() {
+  const w=viewportElement.clientWidth,h=viewportElement.clientHeight
+  const corners=[[0,0],[w,0],[w,h],[0,h]].map(([x,y])=>pixelToGeo(state.map?x:(x-manuscriptOffset.x)/state.scale,state.map?y:(y-manuscriptOffset.y)/state.scale))
+  return {west:Math.min(...corners.map(p=>p.lon)),east:Math.max(...corners.map(p=>p.lon)),south:Math.min(...corners.map(p=>p.lat)),north:Math.max(...corners.map(p=>p.lat))}
+}
+function trackView(track) {
+  if(!state.transform)return []
+  const bounds=visibleBounds()
+  return viewPoints(pointIndex(track,true),bounds,Math.max(1e-12,(bounds.east-bounds.west)*4/viewportElement.clientWidth),Math.max(1e-12,(bounds.north-bounds.south)*4/viewportElement.clientHeight))
+}
 function trackFit(track) {
   if (!state.transform || !state.page || !track?.points?.length) return null
-  let inside = 0
-  for (const point of track.points) {
-    const pixel = geoToPixel(point.lat, point.lon)
-    if (!pixel) continue
-    const x = state.map ? pixel.x : pixel.x * state.scale + manuscriptOffset.x
-    const y = state.map ? pixel.y : pixel.y * state.scale + manuscriptOffset.y
-    if (x >= 0 && x <= viewportElement.clientWidth && y >= 0 && y <= viewportElement.clientHeight) inside += 1
-  }
-  return { inside, total: track.points.length }
+  const inside = state.map ? null : point => {const p=geoToPixel(point.lat,point.lon);const x=p.x*state.scale+manuscriptOffset.x,y=p.y*state.scale+manuscriptOffset.y;return x>=0&&y>=0&&x<=viewportElement.clientWidth&&y<=viewportElement.clientHeight}
+  return {inside:countPoints(pointIndex(track),visibleBounds(),inside),total:track.points.length}
 }
 
 function fitText(track) {
@@ -434,14 +466,14 @@ function renderFolder() {
   $('folderCount').textContent = `${folder.pdfs.length + folder.tracks.length} filer`
   const pdfCard = (file, index) => `
     <div class="folder-file-card">
-      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.hasGeoData ? 'GeoPDF' : 'Utan geodata'}</i></span></div>
-      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}">Gå till plats</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort PDF">×</button></div>
+      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.error ? escapeHtml(file.error) : file.hasGeoData ? (file.chart ? file.chart.type.toUpperCase() + ' · Geodata' : 'GeoPDF') : 'Utan geodata'}</i></span></div>
+      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort fältmanus">×</button></div>
     </div>`
   const pdfGroups = [
     ['Med geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => item.file.hasGeoData)],
     ['Utan geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => !item.file.hasGeoData)]
   ].filter(([, items]) => items.length)
-  $('folderPdfList').innerHTML = pdfGroups.length ? pdfGroups.map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => pdfCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga PDF-filer hittades.</p>'
+  $('folderPdfList').innerHTML = pdfGroups.length ? pdfGroups.map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => pdfCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga fältmanus hittades.</p>'
   const trackCard = (file, index) => `
     <div class="folder-file-card ${file.error ? 'invalid' : ''}">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${file.parsed ? `${file.parsed.points.length.toLocaleString('sv-SE')} punkter${file.parsed.warnings.length ? ' · ' + file.parsed.warnings.length + ' importvarningar' : ''} · ${file.name.split('.').pop().toUpperCase()}<br><i class="file-state ${trackFit(file.edits || file.parsed)?.inside ? 'geo' : ''}">${fitText(file.edits || file.parsed)}</i>` : escapeHtml(file.error)}</span></div>
@@ -456,9 +488,10 @@ function renderFolder() {
   document.querySelectorAll('[data-locate-pdf]').forEach(button => button.addEventListener('click', () => {
     const file = folder.pdfs[Number(button.dataset.locatePdf)]
     if (!file.hasGeoData) return loadPdfFile(file)
+    if (file.chart) { showManuscripts = true; $('toggleManuscripts').setAttribute('aria-pressed', 'true'); $('toggleManuscripts').textContent = 'Dölj fältmanus' }
     const geo = manuscriptGeometry(file)
     if (!geo) return toast('Fältmanusets geodata kunde inte tolkas.')
-    const corners = [[0,0],[1,0],[1,1],[0,1]].map(p => geo(...p))
+    const corners = file.chart?.boundary.length >= 3 ? file.chart.boundary : [[0,0],[1,0],[1,1],[0,1]].map(p => geo(...p))
     loadRoxenMap({ north: Math.max(...corners.map(p => p.lat)), south: Math.min(...corners.map(p => p.lat)), east: Math.max(...corners.map(p => p.lon)), west: Math.min(...corners.map(p => p.lon)) })
   }))
   for (const type of ['pdf', 'track']) document.querySelectorAll(`[data-rename-${type}]`).forEach(button => button.addEventListener('click', () => renameFile(type, Number(button.getAttribute(`data-rename-${type}`)))))
@@ -589,29 +622,32 @@ function drawOverlay() {
   })
 
   if (!state.transform) return
-  const allDepths = state.logs.flatMap(log => log.visible ? processedPoints(log).map(point => correctedDepth(log, point)) : [])
-  const min = Math.min(...allDepths)
-  const max = Math.max(...allDepths)
-
-  state.logs.filter(log => log.visible).forEach(log => {
+  let min=Infinity,max=-Infinity
+  const visible=state.logs.filter(log=>log.visible)
+  for(const log of visible) { const root=pointIndex(log,true).root; if(root){min=Math.min(min,correctedDepth(log,{depth:root.min}));max=Math.max(max,correctedDepth(log,{depth:root.max}))} }
+  let drawn=0
+  for(const log of visible) {
+    const samples=trackView(log)
+    // Join adjacent source samples and nearby overview representatives, but
+    // never bridge distant clusters after clipping points outside the viewport.
     context.beginPath()
-    let started = false
-    const points = processedPoints(log)
-    points.forEach(point => {
-      const pixel = geoToPixel(point.lat, point.lon)
-      if (!pixel) return
-      if (!started) { context.moveTo(pixel.x, pixel.y); started = true } else context.lineTo(pixel.x, pixel.y)
-    })
-    context.strokeStyle = log.color; context.globalAlpha = .72; context.lineWidth = 2.2; context.stroke(); context.globalAlpha = 1
-    const stride = Math.max(1, Math.ceil(points.length / 1100))
-    points.forEach((point, index) => {
-      if (index % stride) return
-      const pixel = geoToPixel(point.lat, point.lon)
-      if (!pixel || pixel.x < 0 || pixel.x > state.width || pixel.y < 0 || pixel.y > state.height) return
-      context.beginPath(); context.arc(pixel.x, pixel.y, 2.4, 0, Math.PI * 2)
-      context.fillStyle = trackColors ? log.color : depthColor(correctedDepth(log, point), min, max); context.fill()
-    })
-  })
+    let previous = null
+    for (const sample of samples) {
+      const pixel = geoToPixel(sample.point.lat, sample.point.lon)
+      if (!pixel) continue
+      if (previous && (sample.index === previous.index + 1 || Math.hypot(pixel.x-previous.x,pixel.y-previous.y)*state.scale <= 12)) context.lineTo(pixel.x,pixel.y)
+      else context.moveTo(pixel.x,pixel.y)
+      previous = {...pixel,index:sample.index}
+    }
+    context.strokeStyle=log.color;context.globalAlpha=.72;context.lineWidth=2.2/state.scale;context.stroke();context.globalAlpha=1
+    for(const {point} of samples) {
+      const pixel=geoToPixel(point.lat,point.lon)
+      if(!pixel)continue
+      context.beginPath();context.arc(pixel.x,pixel.y,2.4/state.scale,0,Math.PI*2)
+      context.fillStyle=trackColors?log.color:depthColor(correctedDepth(log,point),min,max);context.fill();drawn++
+    }
+  }
+  overlay.dataset.renderedPoints=String(drawn)
   if (state.live?.simulated && state.live.position) {
     const pixel = geoToPixel(state.live.position.lat, state.live.position.lon)
     if (pixel) {
@@ -655,9 +691,9 @@ function renderLogs() {
   } else $('logsMapSummary').textContent = 'Aktivera geodata för att se vilka spår som ryms i kartan.'
   $('logList').innerHTML = state.logs.map((log, index) => {
     if (!fittingLogs.includes(log)) return ''
-    const visiblePoints = processedPoints(log)
-    const depths = visiblePoints.map(point => correctedDepth(log, point))
-    const depthRange = depths.length ? `${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m` : 'Inga punkter'
+    const indexed = pointIndex(log,true)
+    const visiblePoints = indexed.points
+    const depthRange = indexed.root ? `${correctedDepth(log,{depth:indexed.root.min}).toFixed(2)}–${correctedDepth(log,{depth:indexed.root.max}).toFixed(2)} m` : 'Inga punkter'
     const adjustment = log.depthAdjustment ? ` · extra justering ${log.depthAdjustment > 0 ? '+' : ''}${log.depthAdjustment.toFixed(2)} m` : ''
     return `<div class="log-card" style="--log-color:${log.color}">
       <label class="log-title"><input class="log-toggle" type="checkbox" data-log="${index}" ${log.visible ? 'checked' : ''}>${escapeHtml(log.name)}</label>
@@ -765,10 +801,10 @@ overlay.addEventListener('click', event => {
     let nearest = null
     state.logs.forEach((log, logIndex) => {
       if (!log.visible) return
-      log.points.forEach((point, pointIndex) => {
+      trackView(log).forEach(({point}) => {
         const pixel = geoToPixel(point.lat, point.lon)
         const distance = pixel ? Math.hypot(pixel.x - clicked.x, pixel.y - clicked.y) * state.scale : Infinity
-        if (distance <= 16 && (!nearest || distance < nearest.distance)) nearest = { logIndex, pointIndex, distance }
+        if (distance <= 16 && (!nearest || distance < nearest.distance)) nearest = { logIndex, pointIndex: log.points.indexOf(point), distance }
       })
     })
     if (nearest) showTrackEditor(nearest.logIndex, Math.floor(nearest.pointIndex / 100))
@@ -796,12 +832,10 @@ overlay.addEventListener('mousemove', event => {
   $('cursorPosition').textContent = `${geo.lat.toFixed(6)}, ${geo.lon.toFixed(6)}`
   let nearest = null
   state.logs.filter(log => log.visible).forEach(log => {
-    const points = processedPoints(log)
-    const stride = Math.max(1, Math.ceil(points.length / 1000))
-    for (let i = 0; i < points.length; i += stride) {
-      const pixel = geoToPixel(points[i].lat, points[i].lon)
-      const distance = pixel ? Math.hypot(pixel.x - point.x, pixel.y - point.y) * state.scale : Infinity
-      if (distance < 10 && (!nearest || distance < nearest.distance)) nearest = { log, point: points[i], distance }
+    for (const {point: sample} of trackView(log)) {
+      const pixel=geoToPixel(sample.lat,sample.lon)
+      const distance=pixel?Math.hypot(pixel.x-point.x,pixel.y-point.y)*state.scale:Infinity
+      if(distance<10&&(!nearest||distance<nearest.distance))nearest={log,point:sample,distance}
     }
   })
   if (nearest) {
@@ -1153,6 +1187,7 @@ async function renameFile(type, index) {
 }
 
 function saveTrack(log) {
+  pointIndexes.delete(log)
   if (!log.sourceId) return
   const edits = structuredClone({ points: log.points, waterLevel: log.waterLevel, waterLevelSource: log.waterLevelSource, correction: log.correction, depthAdjustment: log.depthAdjustment || 0, pruneDistance: log.pruneDistance || 0 })
   const file = state.library.tracks.find(file => file.id === log.sourceId)

@@ -6,6 +6,8 @@ const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel, fetchLatestRoxenLevel } = require('./roxen-level')
 const { createLibraryStore } = require('./library-store')
 const packageMetadata = require('../package.json')
+const { expandChartIndexes: expandBsbIndexes } = require('./bsb-index')
+const expandChartIndexes = files => expandBsbIndexes(files, readSurveyFile)
 let libraryStore
 const liveSessions = new Map()
 
@@ -58,7 +60,7 @@ function createWindow() {
 async function selectFiles(options) {
   const result = await dialog.showOpenDialog(options)
   if (result.canceled) return []
-  const files = await Promise.all(result.filePaths.map(readSurveyFile))
+  const files = await expandChartIndexes(await Promise.all(result.filePaths.map(filePath => readSurveyFile(filePath))))
   await libraryStore.persist(files)
   return files
 }
@@ -81,13 +83,13 @@ async function collectSurveyFiles(rootPath) {
     for (const entry of entries) {
       const filePath = path.join(directory, entry.name)
       if (entry.isDirectory()) await visit(filePath)
-      else if (entry.isFile() && /\.(pdf|txt|csv|trc|sl2|sl3)$/i.test(entry.name)) {
+      else if (entry.isFile() && /\.(pdf|kap|wci|bsb|txt|csv|trc|sl2|sl3)$/i.test(entry.name)) {
         files.push(await readSurveyFile(filePath, rootPath))
       }
     }
   }
   await visit(rootPath)
-  return files
+  return expandChartIndexes(files)
 }
 
 ipcMain.handle('files:open-pdf', () => selectFiles({
@@ -120,16 +122,17 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
       const folderFiles = await collectSurveyFiles(inputPath)
       folders.push({ name: path.basename(inputPath), path: inputPath, files: folderFiles })
       files.push(...folderFiles)
-    } else if (info.isFile() && /\.(pdf|txt|csv|trc|sl2|sl3)$/i.test(inputPath)) {
+    } else if (info.isFile() && /\.(pdf|kap|wci|bsb|txt|csv|trc|sl2|sl3)$/i.test(inputPath)) {
       files.push(await readSurveyFile(inputPath))
     }
   }
-  await libraryStore.persist(files)
-  return { folders, files }
+  const expanded = await expandChartIndexes(files)
+  await libraryStore.persist(expanded)
+  return { folders, files: expanded }
 })
 
 ipcMain.handle('library:update', (_event, id, changes) => libraryStore.update(id, changes))
-ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'txt', 'csv', 'trc', 'sl2', 'sl3'] }] }))
+ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'kap', 'wci', 'bsb', 'txt', 'csv', 'trc', 'sl2', 'sl3'] }] }))
 ipcMain.handle('library:list', () => libraryStore.list())
 ipcMain.handle('library:remove', (_event, id) => libraryStore.remove(id))
 

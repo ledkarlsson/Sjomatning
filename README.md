@@ -224,6 +224,9 @@ Klicka på **Starta simulerad båttur på Roxen** i den egna kollapsbara panelen
 
 Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) varje sekund genom samma parser och loggning som USB-mätning. Tidsfaktorn accelererar både rörelsen och NMEA-klockan. Klicka **Stoppa och spara spåret** när du är klar. Spåret och mätmappen märks SIMULERAD; råloggen innehåller också `simulated: true`. Djupen är påhittade. Detta är en intern simulator och skapar ingen COM-port för andra program.
 
+## Att göra
+
+
 
 ## Att göra – genomfört 2026-09-13
 
@@ -242,3 +245,11 @@ Knappen **Visa hela kartan** återställer Roxenöversikten eller passar in det 
 UI-regressioner körs med `npm run test:map-ui` och `npm run test:library-ui`. De kör den riktiga Electron-renderaren med isolerade testdata och simulerade externa tjänster. Karttestets GeoPDF-prov kräver den lokala filen i `testdata/fältmanus-geodata/`.
 
 Spårlegenden är klickbar: klicka på ett namn för att dölja eller visa spåret. Dolda spår ligger kvar med grå text och överstruket öga. **Visa alla** och **Dölj alla** i legenden styr alla spår. Mushjulet skrollar paneler med scrollbar utan att zooma kartan.
+
+## SeaClear-fältmanus och snabbare kartöversikt
+
+Biblioteket kan nu läsa **WCI** och **KAP** som fältmanus, inklusive kalibrering och kartgräns. Välj en **BSB**-fil för att importera dess KAP-kartor från samma mapp. **Gå till plats** visar kartbilden direkt. Filerna sparas beständigt precis som PDF-manus.
+
+Utzoomade spår visas med ett zoomanpassat urval av punkter. Grundaste punkten representerar små kluster; inzoomning visar fler detaljer. Originalpunkter och export påverkas inte.
+
+Se [verifierade formatvarianter och begränsningar](docs/seaclear-kartor.md). Regressionen `npm run test:seaclear-ui` provar de lokala SeaClear-filerna och ett spår med 200 000 punkter.
