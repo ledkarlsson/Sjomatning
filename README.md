@@ -4,7 +4,7 @@ En Windowsapp som visar en karta över sjön Roxen, kan öppna och kalibrera PDF
 
 I appen laddas Roxenkartan automatiskt. Därefter kan du lägga till mätspår direkt. För egna fältmanus:
 
-1. Öppna ett fältmanus i PDF-format med knappen eller dra PDF-filen direkt till appfönstret.
+1. Öppna ett fältmanus i PDF-format via **Lägg till → Välj filer** i biblioteket, eller dra PDF-filen direkt dit. Välj **Gå till plats** för att visa området; manus utan geodata öppnas för kalibrering.
 2. Om PDF:en är en GeoPDF läses georefereringen automatiskt.
 3. För ett vanligt PDF-manus: ange latitud och longitud för en känd punkt, välj **Placera referenspunkt** och klicka på punkten i kartan. Upprepa med minst två diagonalt placerade punkter; tre punkter ger en bättre affin kalibrering. Kalibreringen sparas lokalt.
 4. Lägg till en eller flera `.TXT`- eller `.CSV`-loggar. Spår och djup visas ovanpå kartan.
@@ -12,7 +12,7 @@ I appen laddas Roxenkartan automatiskt. Därefter kan du lägga till mätspår d
 
 ## Mät direkt från GPS och ekolod
 
-Anslut en NMEA 0183-enhet via USB (eller en USB–seriell-adapter) och använd panelen **GPS och ekolod via USB**:
+Anslut en NMEA 0183-enhet via USB (eller en USB–seriell-adapter) och använd panelen **GPS och ekolod**:
 
 1. Välj enhetens baudrate, vanligen 4 800, 9 600 eller 38 400 baud.
 2. Ange vid behov givarjustering i meter. Värdet läggs till det inkommande djupet.
@@ -21,7 +21,7 @@ Anslut en NMEA 0183-enhet via USB (eller en USB–seriell-adapter) och använd p
 
 Appen stöder GPS-meningarna GGA/RMC och ekolodsmeningarna DPT/DBT. Under körningen skrivs varje mottagen NMEA-mening omedelbart till `raw.nmea`, medan kompletta GPS- och djupmätningar skrivs till `track.csv`. Filerna ligger i den sökväg som visas i livepanelen. Råströmmen ändras aldrig.
 
-Det aktiva spåret syns direkt på kartan och kan exporteras som CSV eller SeaClear waypoint-TXT. För att rätta en felaktig punkt väljer du **Redigera punkter i kartan** på körningen och klickar på punkten. Där kan rådjupet ändras eller punkten tas bort. Vattennivå och generell djupjustering kan fortfarande anges per spår utan att råfilen skrivs om.
+Det aktiva spåret syns direkt på kartan och kan exporteras som CSV eller SeaClear waypoint-TXT. För att rätta en felaktig punkt klickar du på spåret i kartan eller väljer **Info och punkttabell**. Där kan rådjup och koordinater ändras eller punkten tas bort. Stoppa en pågående mätning först; spåret läggs då i biblioteket. Vattennivå och generell djupjustering kan fortfarande anges per spår utan att råfilen skrivs om.
 
 Vattenstånd läses ur loggfilnamn av formen `20240716_33.53_Pioner_Husholmen_trace.TXT` och korrigeras mot normalvattennivån 33,00 meter. Råfilen ändras aldrig.
 
@@ -103,7 +103,7 @@ Flera körningar kan visas samtidigt med egna färger. Varje körning har separa
 
 När ett spår läggs till läser appen automatiskt datumet ur filnamnet eller den första mätpunkten och försöker hämta Roxens publicerade vattennivå för dagen. Vattennivån i filnamnet används som reserv om hämtningen inte lyckas. Varje körning kan därefter justeras separat.
 
-Med **Öppna mapp** inventerar appen PDF-manus och mätspår även i undermappar. Listan visar vilka manus som har inbäddad geodata samt format, filstorlek och antal punkter för varje spår. Filer öppnas eller läggs till direkt från listan.
+Med **Lägg till → Välj mapp** i biblioteket inventerar appen PDF-manus och mätspår även i undermappar. Listan visar vilka manus som har inbäddad geodata samt format, filstorlek och antal punkter för varje spår. Filer öppnas eller läggs till direkt från listan.
 
 Flera mappar kan läggas till med filväljaren eller genom drag-and-drop. Identiska filer identifieras med SHA-256 och importeras bara en gång. När kartan har geodata visar både biblioteket och listan över importerade spår hur många punkter som ryms inom kartan.
 
@@ -220,6 +220,47 @@ För sjömätningen bör även båt, operatör, instrument, antenn-/givaravstån
 
 ### Simulerad båttur utan USB
 
-Klicka på **Starta simulerad båttur på Roxen** i livepanelen. Simulatorn öppnar en karta över Roxen och kör en fiktiv båt i en slinga med 5 knops fart och varierande djup. Välj 1×, 10× eller 60× före start; 10× är standard. En pil visar båtens position och riktning. Kartbakgrunden kräver internet.
+Klicka på **Starta simulerad båttur på Roxen** i den egna kollapsbara panelen **Simulerad båttur**. Simulatorn öppnar en karta över Roxen och kör en fiktiv båt i en slinga med 5 knops fart och varierande djup. Välj 1×, 10× eller 60× före start; 10× är standard. En pil visar båtens position och riktning. Kartbakgrunden kräver internet.
 
 Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) varje sekund genom samma parser och loggning som USB-mätning. Tidsfaktorn accelererar både rörelsen och NMEA-klockan. Klicka **Stoppa och spara spåret** när du är klar. Spåret och mätmappen märks SIMULERAD; råloggen innehåller också `simulated: true`. Djupen är påhittade. Detta är en intern simulator och skapar ingen COM-port för andra program.
+
+
+## Att göra – genomfört 2026-09-13
+
+- [x] Gör det möjligt att redigera namn på filer i biblioteket.
+- [x] Byt namn "GPS och ekolod via USB", det behöver inte vara usb.
+- [x] Djup och fart borde stå tydligare, i själva kartan, när signalen fås.
+- [x] inställningar som hastighet och djup, lägg in dem i ett kugghjul istället i panelen.
+- [x] För fältmanus, "Öppna" behövs inte längre, bara "visa i kartan", som ska heta "Gå till plats" istället.
+- [x] För spår, lägg till knapp för att visa / dölja alla spår. Lägg till ska bytas ut mot visa.
+- [x] Om man klickar på ett spår, ska man få upp info om det spåret. Det ska kunna gå att ändra djupet på spåret.
+- [x] På något sätt vill jag kunna jämföra spår från två eller fler. Vissa båtar har lite olika kalibreringar. ge ett verktyg som på något sätt visar dem. Kanske också att man, typ som i en tabell, kan direkt ändra vissa positioner.
+- [x] Stöd för att visa flera spår: Inför knapp som gör att olika spår får olika färger. Den ska alltså växla mellan färger för djup, och olika spår.
+- [x] Finns det fler ekolodsformat vi kan använda? Kolla testdata/format.
+- [x] När man ändrar i ett spår. Spara en originalkopia, som när som helst kan återställa det modifierade spåret.
+- [x] UI-grej: Övriga spår ska inte synas, om alla är övriga.
+- [x] för spår, "ryms i kartan" ska vara baserad på inzoomningsnivån i kartan. uppdatera det dynamiskt.
+- [x] Vid export till csv blir åäö konstiga.
+- [x] Lägg till, förutom RH00, det som vi kom överens med hydrographica om, 33.0m
+- [x] ROXEN Vattenstånd, samma rad. Ta bort ikon. Ta bort hämta knapp, så fort datum valts ska den hämta.
+- [x] 30 sparade filer, texten kan tas bort. den finns redan i grönt.
+- [x] Roxen vattenstånd. gör den kollapsbar, skriv ut bara senaste värdet i kollapsat tillstånd.
+- [x] Simulerat båttur, gör den till en egen panel, kollapsbar.
+- [x] Ta bort samtliga knappar "visa roxen", Öppna mapp, Öppna fältmanus, Lägg till mätspår. Lägg istället till en "lägg till" knapp i bibliotekpanelen. Man ska kunna dra och släppa rakt in i bibliotekspanelen. uppdatera hjälptexten.
+
+
+### Användning av de nya verktygen
+
+Bibliotekets **Lägg till** samlar fil- och mappval. Dra även filer eller hela mappar direkt till biblioteket. **Byt namn** ändrar det sparade visningsnamnet; filens originalinnehåll och metadata från dess ursprungliga namn bevaras. Fältmanus har en enda **Gå till plats**-knapp.
+
+**Visa alla** och **Dölj alla** styr spåren. **Färg: djup / Färg: spår** växlar färgsättning. Kartmatchningen räknar punkter i det synliga utsnittet och uppdateras efter zoom, panorering och storleksändring. Rubriken Övriga spår visas bara när några spår faktiskt matchar utsnittet.
+
+Klicka på en mätpunkt i kartan för spårets information och punkttabell. Tabellen visar 100 punkter per sida och kan ändra koordinater, rådjup och hela spårets djupjustering. Ändringarna sparas separat i biblioteket och överlever omstart. Originalfilen är den beständiga originalkopian och skrivs aldrig över. **Återställ original** tar bort punktändringar, gallring och manuella justeringar. Bibliotekets borttagningsknapp tar däremot bort både originalet och dess ändringar.
+
+**Jämför synliga spår** jämför två eller fler spår mot en vald referens. Verktyget matchar närmaste referenspunkt inom en inställbar radie (standard 10 meter) och visar antal matchningar samt medianen av korrigerade djupskillnader. En positiv skillnad betyder djupare än referensen. Samma referenspunkt kan matchas flera gånger. Skillnader kan bero på både kalibrering och bottenlutning; inga justeringar görs automatiskt. Öppna tabellen från jämförelsen för att ändra punkter eller djupjustering.
+
+Instrumentets baudrate och givarjustering finns under **⚙ Inställningar**. Djup och fart visas stort på kartan under mätning; värden äldre än fem sekunder visas som streck. Vattenstånd hämtas automatiskt när datum ändras. Panelen visar RH00 samt avvikelsen från Hydrographicas referensnivå **33,00 m RH00** (vattenstånd minus 33,00). Vattenstånd och simulator har egna kollapsbara paneler. CSV-export använder UTF-8 med BOM så att svenska tecken identifieras korrekt i Excel.
+
+Lowrance **SL2 och SL3** kan nu läggas till som spår. Se [formatkontroll och begränsningar](docs/ekolodsformat.md) för provresultat och exakt importomfattning.
+
+UI-regressioner körs med `npm run test:map-ui` och `npm run test:library-ui`. De kör den riktiga Electron-renderaren med isolerade testdata och simulerade externa tjänster. Karttestets GeoPDF-prov kräver den lokala filen i `testdata/fältmanus-geodata/`.

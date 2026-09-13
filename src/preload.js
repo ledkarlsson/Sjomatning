@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('sjomatning', {
+  updateLibraryFile: (id, changes) => ipcRenderer.invoke('library:update', id, changes),
+  openLibrary: () => ipcRenderer.invoke('files:open-library'),
   openPdf: () => ipcRenderer.invoke('files:open-pdf'),
   openLogs: () => ipcRenderer.invoke('files:open-logs'),
   openFolder: () => ipcRenderer.invoke('files:open-folder'),

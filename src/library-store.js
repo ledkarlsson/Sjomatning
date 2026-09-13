@@ -34,7 +34,7 @@ function createLibraryStore(rootPath) {
       const extension = path.extname(file.name).toLowerCase()
       await fs.writeFile(path.join(filesPath, `${id}${extension}`), bytes)
       records.push({
-        id, name: file.name, relativePath: file.relativePath || file.name,
+        id, name: file.name, originalName: file.name, relativePath: file.relativePath || file.name,
         extension, size: bytes.byteLength, addedAt: new Date().toISOString()
       })
       known.add(id)
@@ -67,7 +67,28 @@ function createLibraryStore(rootPath) {
     return true
   }
 
-  return { persist, list, remove }
+  // Serialize index mutations so simultaneous edits never overwrite each other.
+  let pending = Promise.resolve()
+  const serial = operation => (...args) => {
+    const result = pending.then(() => operation(...args))
+    pending = result.catch(() => {})
+    return result
+  }
+  async function update(id, changes) {
+    const records = await readIndex()
+    const record = records.find(item => item.id === id)
+    if (!record) throw new Error('Filen finns inte i biblioteket.')
+    if (changes.name !== undefined) {
+      const name = String(changes.name).trim()
+      if (!name || /[\\/:*?"<>|\x00-\x1f]/.test(name) || name.length > 240) throw new Error('Ogiltigt filnamn.')
+      record.originalName ||= record.name
+      record.name = name.toLowerCase().endsWith(record.extension) ? name : name + record.extension
+    }
+    if (changes.edits !== undefined) record.edits = changes.edits
+    await writeIndex(records)
+    return record
+  }
+  return { persist: serial(persist), list: serial(list), remove: serial(remove), update: serial(update) }
 }
 
 module.exports = { createLibraryStore }

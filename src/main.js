@@ -81,7 +81,7 @@ async function collectSurveyFiles(rootPath) {
     for (const entry of entries) {
       const filePath = path.join(directory, entry.name)
       if (entry.isDirectory()) await visit(filePath)
-      else if (entry.isFile() && /\.(pdf|txt|csv|trc)$/i.test(entry.name)) {
+      else if (entry.isFile() && /\.(pdf|txt|csv|trc|sl2|sl3)$/i.test(entry.name)) {
         files.push(await readSurveyFile(filePath, rootPath))
       }
     }
@@ -99,7 +99,7 @@ ipcMain.handle('files:open-pdf', () => selectFiles({
 ipcMain.handle('files:open-logs', () => selectFiles({
   title: 'Välj mätloggar',
   properties: ['openFile', 'multiSelections'],
-  filters: [{ name: 'Mätspår', extensions: ['txt', 'csv', 'trc'] }]
+  filters: [{ name: 'Mätspår', extensions: ['txt', 'csv', 'trc', 'sl2', 'sl3'] }]
 }))
 
 ipcMain.handle('files:open-folder', async () => {
@@ -120,7 +120,7 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
       const folderFiles = await collectSurveyFiles(inputPath)
       folders.push({ name: path.basename(inputPath), path: inputPath, files: folderFiles })
       files.push(...folderFiles)
-    } else if (info.isFile() && /\.(pdf|txt|csv|trc)$/i.test(inputPath)) {
+    } else if (info.isFile() && /\.(pdf|txt|csv|trc|sl2|sl3)$/i.test(inputPath)) {
       files.push(await readSurveyFile(inputPath))
     }
   }
@@ -128,6 +128,8 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
   return { folders, files }
 })
 
+ipcMain.handle('library:update', (_event, id, changes) => libraryStore.update(id, changes))
+ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'txt', 'csv', 'trc', 'sl2', 'sl3'] }] }))
 ipcMain.handle('library:list', () => libraryStore.list())
 ipcMain.handle('library:remove', (_event, id) => libraryStore.remove(id))
 
@@ -159,7 +161,7 @@ ipcMain.handle('tracks:export', async (_event, { suggestedName, content, format 
     filters: [{ name: extension === 'txt' ? 'SeaClear waypoint' : 'CSV', extensions: [extension] }]
   })
   if (result.canceled || !result.filePath) return null
-  await fs.writeFile(result.filePath, content, 'utf8')
+  await fs.writeFile(result.filePath, extension === 'csv' && !content.startsWith('\uFEFF') ? '\uFEFF' + content : content, 'utf8')
   return result.filePath
 })
 
@@ -188,7 +190,15 @@ ipcMain.handle('live:append', async (_event, { id, raw, point }) => {
   return true
 })
 
-ipcMain.handle('live:stop', (_event, id) => liveSessions.delete(id))
+ipcMain.handle('live:stop', async (_event, id) => {
+  const target = liveSessions.get(id)
+  if (!target) return null
+  const file = await readSurveyFile(target.csvPath)
+  file.name = `${path.basename(path.dirname(target.csvPath))}.csv`
+  await libraryStore.persist([file])
+  liveSessions.delete(id)
+  return file
+})
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return

@@ -184,3 +184,22 @@ canvas { position: absolute; inset: 0; display: block; }
 .layout.sidebar-hidden .drop-overlay { left: 18px; }
 .viewport { overflow: hidden; touch-action: none; }
 .canvas-wrap { position: absolute; left: 0; top: 0; }
+
+/* Library editing and instruments remain outside the scaled map canvas. */
+summary { cursor: pointer; font-weight: 650; padding: 4px 0; }
+summary + * { margin-top: 12px; }
+#waterSummary { display: block; font-size: 14px; font-weight: 400; margin-top: 5px; }
+.map-readout { position: absolute; top: 16px; right: 16px; z-index: 5; display: flex; gap: 24px; padding: 12px 20px; background: #fffffff2; border-radius: 12px; box-shadow: 0 2px 12px #0003; pointer-events: none; }
+.map-readout span { display: flex; flex-direction: column; }
+.map-readout strong { font-size: 30px; font-variant-numeric: tabular-nums; color: #123f4a; }
+dialog { width: min(1000px, 90vw); max-height: 85vh; border: 1px solid #c4d3ce; border-radius: 12px; padding: 24px; color: #193c38; overflow: auto; }
+dialog::backdrop { background: #102b3970; }
+dialog table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+dialog th, dialog td { padding: 8px; text-align: left; border-bottom: 1px solid #dbe5e0; }
+dialog td input { min-width: 90px; width: 100%; }
+dialog > form { text-align: right; }
+#folderPanel { border: 2px solid #c8dbd4; }
+.file-actions { flex-wrap: wrap; }
+.instrument-settings { margin: 10px 0; }
+.folder-file-card { flex-direction: column; align-items: stretch; gap: 8px; }
+.file-actions { justify-content: flex-start; }

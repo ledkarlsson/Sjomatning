@@ -61,7 +61,7 @@ export function exportCsv(tracks) {
       ].join(';'))
     }
   }
-  return `${rows.join('\r\n')}\r\n`
+  return `\uFEFF${rows.join('\r\n')}\r\n`
 }
 
 export function exportWaypoints(tracks) {
@@ -74,4 +74,33 @@ export function exportWaypoints(tracks) {
     })
   })
   return `${rows.join('\r\n')}\r\n`
+}
+
+// Index on the Earth's 3-D surface to find nearby measurements without an
+// all-pairs scan; this also handles longitude wraparound and high latitudes.
+export function compareTrackPoints(reference, track, radius = 10) {
+  if (!Number.isFinite(radius) || radius <= 0) throw new Error('Ogiltig jämförelseradie.')
+  const cell = point => {
+    const lat = point.lat * Math.PI / 180, lon = point.lon * Math.PI / 180
+    return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)].map(value => Math.floor(value * EARTH_RADIUS_METERS / radius))
+  }
+  const grid = new Map()
+  reference.points.forEach((point, index) => {
+    const key = cell(point).join(',')
+    if (!grid.has(key)) grid.set(key, [])
+    grid.get(key).push({ point, index })
+  })
+  const pairs = []
+  track.points.forEach((point, index) => {
+    const [x,y,z] = cell(point)
+    let nearest = null
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      for (const candidate of grid.get([x+dx,y+dy,z+dz].join(',')) || []) {
+        const distance = distanceMeters(point, candidate.point)
+        if (distance <= radius && (!nearest || distance < nearest.distance)) nearest = { ...candidate, distance }
+      }
+    }
+    if (nearest) pairs.push({ index, referenceIndex: nearest.index, distance: nearest.distance, delta: adjustedDepth(track, point) - adjustedDepth(reference, nearest.point) })
+  })
+  return pairs
 }

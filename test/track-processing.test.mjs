@@ -22,6 +22,8 @@ test('vattenstånd och separat djupjustering kombineras per spår', () => {
 test('CSV- och waypointexport använder bearbetade justerade värden', () => {
   const track = { name: 'Körning 1', points: [point(15.6, 5)], correction: .5, depthAdjustment: .1, pruneDistance: 25 }
   assert.match(exportCsv([track]), /4\.60/)
+  assert.equal(exportCsv([track]).charCodeAt(0), 0xFEFF)
+  assert.ok(exportCsv([track]).includes('Körning 1'))
   assert.match(exportWaypoints([track]), /A0001 4\.60/)
   assert.match(exportWaypoints([track]), /Ekolod:5\.00/)
 })
@@ -30,4 +32,16 @@ test('datum hämtas först från filnamnsmetadata och annars från mätpunkten',
   assert.equal(trackDate({ date: '2026-09-11', points: [point(15.6, 5)] }), '2026-09-11')
   assert.equal(trackDate({ points: [point(15.6, 5)] }), '2026-09-12')
   assert.equal(trackDate({ points: [{ ...point(15.6, 5), date: '' }] }), null)
+})
+
+import { compareTrackPoints } from '../src/track-processing.mjs'
+test('jämför närliggande punkter med korrigering och utesluter avlägsna punkter', () => {
+  const reference = { points: [point(15.6, 5)], correction: .5 }
+  const track = { points: [point(15.60001, 6), point(16, 2)], depthAdjustment: -.2 }
+  const pairs = compareTrackPoints(reference, track, 10)
+  assert.equal(pairs.length, 1)
+  assert.equal(pairs[0].referenceIndex, 0)
+  assert.ok(Math.abs(pairs[0].delta - 1.3) < 1e-9)
+  assert.ok(pairs[0].distance < 1)
+  assert.deepEqual(compareTrackPoints({ points: [] }, track), [])
 })

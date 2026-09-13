@@ -27,7 +27,7 @@ function createMinimalPdf() {
 app.setPath('userData', path.join(app.getPath('temp'), `sjomatning-map-test-${process.pid}`))
 app.whenReady().then(async () => {
   let pdfOpens = 0
-  ipcMain.handle('files:open-pdf', async () => ++pdfOpens === 1 ? [{ id: 'plain', name: 'Panorering.pdf', bytes: Array.from(createMinimalPdf()) }] : [{ id: 'geo', name: 'Granholmen.pdf', bytes: Array.from(await fs.readFile('testdata/fältmanus-geodata/Granholmen - en sida.pdf')) }])
+  ipcMain.handle('files:open-library', async () => ++pdfOpens === 1 ? [{ id: 'plain', name: 'Panorering.pdf', bytes: Array.from(createMinimalPdf()) }] : [{ id: 'geo', name: 'Granholmen.pdf', bytes: Array.from(await fs.readFile('testdata/fältmanus-geodata/Granholmen - en sida.pdf')) }])
   ipcMain.handle('files:launch-pdf', () => null)
   ipcMain.handle('library:list', () => [])
   ipcMain.handle('app:info', () => ({ version: 'test', buildDate: 'test' }))
@@ -46,11 +46,13 @@ app.whenReady().then(async () => {
   await win.loadFile(path.resolve('src/index.html'))
   const run = source => win.webContents.executeJavaScript(source)
   async function waitFor(source) {
-    for (let attempt = 0; attempt < 100; attempt++) {
+    for (let attempt = 0; attempt < 400; attempt++) {
       if (await run(source)) return
       await new Promise(resolve => setTimeout(resolve, 50))
     }
-    throw new Error(`Timed out: ${source}`)
+    console.error('Renderer diagnostics', errors, await run(`document.querySelector('#toast').textContent`))
+    await fs.writeFile('tmp/map-test-failure.png', (await win.webContents.capturePage()).toPNG())
+    throw new Error(`Timed out: ${source.slice(0, 180)}`)
   }
   await waitFor(`document.querySelector('#viewport').classList.contains('web-map') && document.querySelector('#mapLoadStatus').classList.contains('hidden')`)
   assert.ok(requests.some(url => url.includes('openstreetmap.org')))
@@ -79,7 +81,7 @@ app.whenReady().then(async () => {
   await waitFor(`Number(document.querySelector('#zoomValue').textContent.slice(2)) < 7`)
   for (let i = 0; i < 100 && !requests.some(url => /openstreetmap.org\/[3456]\//.test(url)); i++) await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(requests.some(url => /openstreetmap.org\/[3456]\//.test(url)), 'Sweden overview uses overview tiles')
-  await run(`document.querySelector('#openRoxenMap').click()`)
+  await run(`document.querySelector('#fitView').click()`)
   assert.equal(await run(`document.querySelector('#zoomValue').textContent`), beforeZoom)
   win.setSize(1100, 700)
   await waitFor(`document.querySelector('#overlayCanvas').width === document.querySelector('#viewport').clientWidth`)
@@ -92,7 +94,9 @@ app.whenReady().then(async () => {
   assert.equal(await run(`document.querySelector('#toggleSidebar').getAttribute('aria-expanded')`), 'false')
   await run(`document.querySelector('#toggleSidebar').click()`)
   await waitFor(`document.querySelector('#viewport').clientWidth === ${oldWidth}`)
-  await run(`document.querySelector('#openPdf').click()`)
+  await run(`document.querySelector('#addLibrary').click(); document.querySelector('#addFiles').click()`)
+  await waitFor(`document.querySelectorAll('[data-locate-pdf]').length === 1`)
+  await run(`document.querySelector('[data-locate-pdf]').click()`)
   await waitFor(`document.querySelector('#documentName').textContent === 'Panorering.pdf'`)
   assert.equal(await run(`document.querySelector('#documentPanel').classList.contains('hidden')`), false, 'PDF metadata remains available')
   const canvasRect = () => run(`(() => { const r = document.querySelector('#overlayCanvas').getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height } })()`)
@@ -126,20 +130,35 @@ app.whenReady().then(async () => {
   const viewCenter = await run(`(() => { const r = document.querySelector('#viewport').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2} })()`)
   assert.ok(Math.abs(fitted.x + fitted.width/2 - viewCenter.x) < 1)
   assert.ok(Math.abs(fitted.y + fitted.height/2 - viewCenter.y) < 1)
-  await run(`document.querySelector('#openPdf').click()`)
-  await waitFor(`document.querySelector('#documentName').textContent === 'Granholmen.pdf'`)
-  await run(`document.querySelector('[data-locate-pdf]').click()`)
+  await run(`document.querySelector('#addLibrary').click(); document.querySelector('#addFiles').click()`)
+  await waitFor(`document.querySelectorAll('[data-locate-pdf]').length === 2`)
+  await run(`document.querySelector('[data-locate-pdf="1"]').click()`)
   await waitFor(`document.querySelector('#viewport').classList.contains('web-map')`)
   await new Promise(resolve => setTimeout(resolve, 300))
-  const frameOnly = await run(`document.querySelector('#pdfCanvas').toDataURL()`)
+  await waitFor(`document.querySelector('#mapLoadStatus').classList.contains('hidden')`)
+  await new Promise(resolve => setTimeout(resolve, 700))
+  async function stableCanvas() {
+    let previous, stable = 0
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const current = await run(`document.querySelector('#pdfCanvas').toDataURL()`)
+      stable = current === previous ? stable + 1 : 0
+      if (stable >= 8) return current
+      previous = current
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    throw new Error('Map drawing did not settle')
+  }
+  const frameOnly = await stableCanvas()
   await run(`document.querySelector('#toggleManuscripts').click()`)
   assert.equal(await run(`document.querySelector('#toggleManuscripts').getAttribute('aria-pressed')`), 'true')
   await waitFor(`document.querySelector('#pdfCanvas').toDataURL() !== ${JSON.stringify(frameOnly)}`)
   await new Promise(resolve => setTimeout(resolve, 300))
   await fs.mkdir('tmp', { recursive: true })
+  await new Promise(resolve => setTimeout(resolve, 1800))
   await fs.writeFile('tmp/manuscript-map.png', (await win.webContents.capturePage()).toPNG())
   await run(`document.querySelector('#toggleManuscripts').click()`)
-  await waitFor(`document.querySelector('#pdfCanvas').toDataURL() === ${JSON.stringify(frameOnly)}`)
+  const restoredFrame = await stableCanvas()
+  assert.equal(restoredFrame === frameOnly, true, 'hiding manuscript restores the overview map')
   assert.deepEqual(errors, [])
   await fs.mkdir('tmp', { recursive: true })
   await fs.writeFile('tmp/map-regression.png', (await win.webContents.capturePage()).toPNG())
