@@ -158,6 +158,10 @@ app.whenReady().then(async () => {
   await fs.writeFile('tmp/manuscript-map.png', (await win.webContents.capturePage()).toPNG())
   await run(`document.querySelector('#toggleManuscripts').click()`)
   const restoredFrame = await stableCanvas()
+  if(restoredFrame !== frameOnly) {
+    await fs.writeFile('tmp/map-frame-before.png',Buffer.from(frameOnly.split(',')[1],'base64'))
+    await fs.writeFile('tmp/map-frame-after.png',Buffer.from(restoredFrame.split(',')[1],'base64'))
+  }
   assert.equal(restoredFrame === frameOnly, true, 'hiding manuscript restores the overview map')
   assert.deepEqual(errors, [])
   await fs.mkdir('tmp', { recursive: true })

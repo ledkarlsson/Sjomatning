@@ -40,3 +40,16 @@ test('namn och samtidiga redigeringar överlever omstart utan att original ändr
   assert.deepEqual(file.bytes, bytes)
   await assert.rejects(reopened.update(id, { name: '../escape.csv' }))
 })
+
+test('manuscript annotations survive restart, editing and deletion without modifying the PDF',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'sjomatning-notes-'))
+ t.after(()=>fs.rm(root,{recursive:true,force:true}))
+ const store=createLibraryStore(root),bytes=Buffer.from('original manuscript')
+ await store.persist([{name:'manus.pdf',bytes}]);const [{id}]=await store.list()
+ const note={id:'note',page:1,x:.25,y:.5,text:'4,2 Åäö',size:12,color:'#c62828'}
+ await store.update(id,{annotations:[note]})
+ const reopened=createLibraryStore(root)
+ let [file]=await reopened.list();assert.deepEqual(file.annotations,[note]);assert.deepEqual(file.bytes,bytes)
+ await reopened.update(id,{annotations:[{...note,text:'5,1'}]});[file]=await reopened.list();assert.equal(file.annotations[0].text,'5,1')
+ await reopened.update(id,{annotations:[]});[file]=await reopened.list();assert.deepEqual(file.annotations,[]);assert.deepEqual(file.bytes,bytes)
+})

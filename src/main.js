@@ -4,6 +4,7 @@ const crypto = require('node:crypto')
 const { app, BrowserWindow, dialog, ipcMain, Menu, session } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel, fetchLatestRoxenLevel } = require('./roxen-level')
+const { exportAnnotatedManuscript } = require('./manuscript-annotations')
 const { createLibraryStore } = require('./library-store')
 const packageMetadata = require('../package.json')
 const { expandChartIndexes: expandBsbIndexes } = require('./bsb-index')
@@ -154,6 +155,24 @@ ipcMain.handle('roxen:water-level', async (_event, date) => {
 })
 
 ipcMain.handle('app:info', () => ({ version: app.getVersion(), buildDate: packageMetadata.buildDate }))
+
+ipcMain.handle('manuscript:export-pdf', async (_event, id) => {
+  const file = (await libraryStore.list()).find(item=>item.id===id)
+  if (!file) throw new Error('Fältmanuset finns inte i biblioteket.')
+  const result = await dialog.showSaveDialog({ title:'Exportera fältmanus med anteckningar', defaultPath:file.name.replace(/\.[^.]+$/, '') + '-anteckningar.pdf', filters:[{name:'PDF',extensions:['pdf']}] })
+  if (result.canceled || !result.filePath) return null
+  const destination = path.resolve(result.filePath)
+  const libraryRoot = path.resolve(app.getPath('userData'), 'survey-library')
+  const relative = path.relative(libraryRoot,destination)
+  if (!relative || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative))) throw new Error('Exportera till en ny fil utanför det sparade biblioteket.')
+  try {
+    const existing = await fs.readFile(destination)
+    if (crypto.createHash('sha256').update(existing).digest('hex') === file.id) throw new Error('Välj ett nytt filnamn så att originalmanuset bevaras.')
+  } catch (error) { if (error.code !== 'ENOENT') throw error }
+  const bytes = await exportAnnotatedManuscript(file)
+  await fs.writeFile(destination,bytes)
+  return destination
+})
 
 ipcMain.handle('tracks:export', async (_event, { suggestedName, content, format }) => {
   if (typeof content !== 'string' || content.length > 100 * 1024 * 1024) throw new Error('Ogiltigt exportinnehåll.')

@@ -23,6 +23,11 @@ let trackColors = false
 let tracksPanelOpen = false
 const manuscriptName = name => name.replace(/\.(pdf|kap|wci)$/i, '')
 const shortTrackName = name => name.length > 42 ? name.slice(0, 26) + '…' + name.slice(-15) : name
+const annotationEditor = { file: null, page: 1, selected: null, placing: false, loading: false, saving: false, fontScale: 1.6 }
+let annotationSaveTimer
+let annotationSavePromise = Promise.resolve(true)
+let annotationWritePromise = Promise.resolve()
+let documentLoadId = 0
 let fitTimer
 function refreshFits() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { renderFolder(); renderLogs() }, 180) }
 
@@ -123,6 +128,17 @@ function geoToPixel(lat, lon) {
   if (state.map) return geoToMapPixel(state.map, lat, lon)
   const t = state.transform
   if (!t) return null
+  if (t.type === 'chart') {
+    let x=.5,y=.5
+    for(let i=0;i<8;i++) {
+      const p=t.geo(x,y),px=t.geo(x+.00001,y),py=t.geo(x,y+.00001)
+      const a=(px.lon-p.lon)/.00001,b=(py.lon-p.lon)/.00001,c=(px.lat-p.lat)/.00001,d=(py.lat-p.lat)/.00001,det=a*d-b*c
+      if(Math.abs(det)<1e-14) return null
+      const dx=((lon-p.lon)*d-b*(lat-p.lat))/det,dy=(a*(lat-p.lat)-(lon-p.lon)*c)/det
+      x+=dx;y+=dy;if(Math.abs(dx)+Math.abs(dy)<1e-9)break
+    }
+    return {x:x*state.width,y:y*state.height}
+  }
   if (t.type === 'axis') return { x: (lon - t.lonOffset) / t.lonScale, y: (lat - t.latOffset) / t.latScale }
   const determinant = t.lon[0] * t.lat[1] - t.lon[1] * t.lat[0]
   if (Math.abs(determinant) < 1e-12) return null
@@ -135,54 +151,55 @@ function pixelToGeo(x, y) {
   if (state.map) return mapPixelToGeo(state.map, x, y)
   const t = state.transform
   if (!t) return null
+  if (t.type === 'chart') return t.geo(x/state.width,y/state.height)
   if (t.type === 'axis') return { lon: t.lonScale * x + t.lonOffset, lat: t.latScale * y + t.latOffset }
   return { lon: t.lon[0] * x + t.lon[1] * y + t.lon[2], lat: t.lat[0] * x + t.lat[1] * y + t.lat[2] }
 }
 
-async function loadPdfFile(file) {
+async function loadPdfFile(file, pageNumber = 1, editing = false) {
+  if (!editing) { if (!await flushAnnotationChanges()) return false; closeAnnotationEditor() }
+  const loadId = ++documentLoadId
   try {
     const bytes = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
-    state.map = null
+    const canvas = document.createElement('canvas')
+    let pdf = null, page, automatic = null, fontScale
+    if (file.chart) {
+      const pixels = await rasterPixels(file.chart)
+      canvas.width = pixels.width; canvas.height = pixels.height
+      canvas.getContext('2d').putImageData(new ImageData(pixels.rgba,pixels.width,pixels.height),0,0)
+      page = { raster: true }
+      fontScale = canvas.width / (file.chart.width*72/300)
+    } else {
+      pdf = await pdfjsLib.getDocument({data:bytes.slice()}).promise
+      page = await pdf.getPage(pageNumber)
+      const view = page.getViewport({scale:1.6})
+      canvas.width = Math.round(view.width); canvas.height = Math.round(view.height)
+      await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise
+      fontScale = canvas.width / (page.getViewport({scale:1}).width / page.userUnit)
+      if (pageNumber === 1) automatic = parseGeoPdf(bytes)
+    }
+    if (loadId !== documentLoadId) { if (pdf) await pdf.loadingTask.destroy(); return false }
+    const previousPdf = state.pdf
+    state.map = null; state.pdf = pdf; state.page = page; state.activePdfId = file.id || null
+    state.pageNumber = pageNumber
+    annotationEditor.fontScale = fontScale
     viewportElement.classList.remove('web-map')
     $('mapAttribution').classList.add('hidden')
-    state.pdfKey = `${file.originalName || file.name}:${bytes.byteLength}`
-    state.activePdfId = file.id || null
-    state.pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-    state.page = await state.pdf.getPage(1)
-    state.calibration = []
-    state.transform = null
-    const automatic = parseGeoPdf(bytes)
-    const baseViewport = state.page.getViewport({ scale: 1.6 })
-    state.width = Math.round(baseViewport.width)
-    state.height = Math.round(baseViewport.height)
-    pdfCanvas.width = overlay.width = state.width
-    pdfCanvas.height = overlay.height = state.height
-    wrap.style.width = `${state.width}px`
-    wrap.style.height = `${state.height}px`
-    await state.page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: baseViewport }).promise
-
-    if (automatic) {
-      state.calibration = automatic.map(point => ({ x: point.nx * state.width, y: (1 - point.ny) * state.height, lat: point.lat, lon: point.lon, automatic: true }))
-      state.transform = calibrationTransform(state.calibration)
-    } else {
-      state.calibration = restoreCalibration()
-      state.transform = calibrationTransform(state.calibration)
-    }
+    state.pdfKey = `${file.originalName || file.name}:${bytes.byteLength}${pageNumber === 1 ? '' : ':page'+pageNumber}`
+    state.width = canvas.width; state.height = canvas.height
+    pdfCanvas.width = overlay.width = state.width; pdfCanvas.height = overlay.height = state.height
+    pdfCanvas.getContext('2d').drawImage(canvas,0,0)
+    state.calibration = automatic ? automatic.map(point=>({x:point.nx*state.width,y:(1-point.ny)*state.height,lat:point.lat,lon:point.lon,automatic:true})) : restoreCalibration()
+    state.transform = file.chart ? {type:'chart',geo:file.chart.geometry} : calibrationTransform(state.calibration)
     $('documentName').textContent = file.name
-    $('pageInfo').textContent = `${state.pdf.numPages} sida${state.pdf.numPages === 1 ? '' : 'or'}`
-    $('introPanel').classList.add('hidden')
-    $('documentPanel').classList.remove('hidden')
-    $('calibrationPanel').classList.toggle('hidden', Boolean(state.transform))
-    $('emptyState').classList.add('hidden')
-    wrap.classList.remove('hidden')
-    viewportElement.classList.remove('empty')
-    updateGeoStatus()
-    fitView()
-    drawOverlay()
-  } catch (error) {
-    console.error(error)
-    toast(`Kunde inte öppna PDF: ${error.message}`)
-  }
+    $('pageInfo').textContent = pdf ? 'PDF' : file.chart.type.toUpperCase()
+    $('introPanel').classList.add('hidden'); $('documentPanel').classList.remove('hidden')
+    $('calibrationPanel').classList.toggle('hidden',Boolean(state.transform) || editing)
+    $('emptyState').classList.add('hidden'); wrap.classList.remove('hidden'); viewportElement.classList.remove('empty')
+    updateGeoStatus(); fitView(); drawOverlay()
+    if (previousPdf && previousPdf !== pdf) void previousPdf.loadingTask.destroy()
+    return true
+  } catch (error) { console.error(error); toast(`Kunde inte öppna fältmanuset: ${error.message}`); return false }
 }
 
 // Keep PDF rasters separate from the map canvas so tile refreshes cannot erase them.
@@ -196,7 +213,7 @@ async function manuscriptRaster(file) {
       const pixels = await rasterPixels(file.chart)
       const canvas = document.createElement('canvas'); canvas.width = pixels.width; canvas.height = pixels.height
       canvas.getContext('2d').putImageData(new ImageData(pixels.rgba, pixels.width, pixels.height), 0, 0)
-      file.mapRaster = { canvas, crop: { x: 0, y: 0, width: canvas.width, height: canvas.height } }
+      file.mapRaster = { canvas, noteScale: canvas.width/(file.chart.width*72/300), crop: { x: 0, y: 0, width: canvas.width, height: canvas.height } }
       return file.mapRaster
     }
     loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(file.bytes).slice() })
@@ -215,7 +232,7 @@ async function manuscriptRaster(file) {
     const b = viewport.convertToViewportPoint(box[2], box[3])
     const crop = { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0]-a[0]), height: Math.abs(b[1]-a[1]) }
     if (![crop.x, crop.y, crop.width, crop.height].every(Number.isFinite) || !crop.width || !crop.height) throw new Error('Ogiltig geografisk yta')
-    file.mapRaster = { canvas, crop }
+    file.mapRaster = { canvas, crop, noteScale: canvas.width/(original.width/page.userUnit) }
   } catch (error) {
     file.mapRasterFailed = true
     toast(`Kunde inte visa ${file.name} i kartan: ${error.message}`)
@@ -250,7 +267,8 @@ function drawManuscripts(context, map) {
     if (showManuscripts && !file.mapRaster) void manuscriptRaster(file)
     if (showManuscripts && file.mapRaster) {
       renderedCharts.push(file.id)
-      const { canvas, crop } = file.mapRaster
+      const { crop } = file.mapRaster
+      const canvas = manuscriptImage(file)
       context.save(); context.beginPath(); corners.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y)); context.closePath(); context.clip()
       // Subdivide to follow Mercator curvature as well as rotated manuscript edges.
       const steps = 12
@@ -357,6 +375,8 @@ function showMap(map) {
 }
 
 async function loadRoxenMap(bounds = ROXEN_BOUNDS) {
+  if (!await flushAnnotationChanges()) return
+  documentLoadId++; closeAnnotationEditor()
   for (const [url, entry] of tileCache) if (entry.failed) tileCache.delete(url)
   state.pdf = null
   state.pdfKey = null
@@ -467,7 +487,7 @@ function renderFolder() {
   const pdfCard = (file, index) => `
     <div class="folder-file-card">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.error ? escapeHtml(file.error) : file.hasGeoData ? (file.chart ? file.chart.type.toUpperCase() + ' · Geodata' : 'GeoPDF') : 'Utan geodata'}</i></span></div>
-      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort fältmanus">×</button></div>
+      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-annotate-pdf="${index}" ${file.error ? 'disabled' : ''}>Anteckna</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort fältmanus">×</button></div>
     </div>`
   const pdfGroups = [
     ['Med geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => item.file.hasGeoData)],
@@ -485,6 +505,7 @@ function renderFolder() {
     : [['Mätspår', indexedTracks]]
   $('folderTrackList').innerHTML = indexedTracks.length ? trackGroups.filter(([, items]) => items.length).map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => trackCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
 
+  document.querySelectorAll('[data-annotate-pdf]').forEach(button=>button.onclick=()=>openAnnotationEditor(folder.pdfs[Number(button.dataset.annotatePdf)]))
   document.querySelectorAll('[data-locate-pdf]').forEach(button => button.addEventListener('click', () => {
     const file = folder.pdfs[Number(button.dataset.locatePdf)]
     if (!file.hasGeoData) return loadPdfFile(file)
@@ -501,6 +522,7 @@ function renderFolder() {
 }
 
 function clearActivePdf() {
+  documentLoadId++; closeAnnotationEditor()
   state.pdf = null; state.page = null; state.map = null; state.activePdfId = null; state.transform = null; state.calibration = []
   pdfCanvas.getContext('2d').clearRect(0, 0, pdfCanvas.width, pdfCanvas.height)
   overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
@@ -546,7 +568,7 @@ function updateGeoStatus() {
     badge.textContent = 'Automatisk GPS-karta'
     badge.className = 'badge success'
   } else if (state.transform) {
-    badge.textContent = state.calibration.some(p => p.automatic) ? 'GeoPDF' : 'Kalibrerat'
+    badge.textContent = state.transform.type === 'chart' ? 'Kalibrerat fältmanus' : state.calibration.some(p => p.automatic) ? 'GeoPDF' : 'Kalibrerat'
     badge.className = 'badge success'
   } else {
     badge.textContent = `${state.calibration.length}/2+ punkter`
@@ -621,7 +643,7 @@ function drawOverlay() {
     context.fillStyle = '#176b58'; context.font = 'bold 11px system-ui'; context.fillText(String(index + 1), point.x + 10, point.y - 9)
   })
 
-  if (!state.transform) return
+  if (!state.transform) { drawManuscriptNotes(context); return }
   let min=Infinity,max=-Infinity
   const visible=state.logs.filter(log=>log.visible)
   for(const log of visible) { const root=pointIndex(log,true).root; if(root){min=Math.min(min,correctedDepth(log,{depth:root.min}));max=Math.max(max,correctedDepth(log,{depth:root.max}))} }
@@ -658,6 +680,7 @@ function drawOverlay() {
     }
   }
 
+  drawManuscriptNotes(context)
 }
 
 function correctedDepth(log, point) {
@@ -795,7 +818,14 @@ function canvasPoint(event) {
   return { x: (event.clientX - rect.left) / state.scale, y: (event.clientY - rect.top) / state.scale }
 }
 
-overlay.addEventListener('click', event => {
+overlay.addEventListener('click', async event => {
+  if (annotationEditor.file) {
+    if (event.detail > 1 || annotationEditor.saving || annotationEditor.loading) return
+    const point = canvasPoint(event)
+    if (annotationEditor.placing) { void placeManuscriptNote(point); return }
+    const note = noteAtPoint(point)
+    if (note) { if(!await flushAnnotationChanges())return; selectNote(note); annotationEditor.placing=true; annotationEditor.preview=point; updateAnnotationControls(); drawOverlay(); return }
+  }
   if (!state.armed) {
     const clicked = canvasPoint(event)
     let nearest = null
@@ -825,6 +855,7 @@ overlay.addEventListener('click', event => {
 })
 
 overlay.addEventListener('mousemove', event => {
+  if (annotationEditor.file && annotationEditor.placing) { annotationEditor.preview=canvasPoint(event); $('tooltip').classList.add('hidden'); drawOverlay(); return }
   if (viewportElement.classList.contains('panning')) return
   if (!state.transform) return
   const point = canvasPoint(event)
@@ -845,7 +876,12 @@ overlay.addEventListener('mousemove', event => {
   } else $('tooltip').classList.add('hidden')
 })
 
-overlay.addEventListener('mouseleave', () => $('tooltip').classList.add('hidden'))
+overlay.addEventListener('mouseleave', () => { $('tooltip').classList.add('hidden'); annotationEditor.preview=null; if(annotationEditor.placing)drawOverlay() })
+overlay.addEventListener('dblclick',async event=>{
+  if(!annotationEditor.file)return
+  const note=noteAtPoint(canvasPoint(event))
+  if(note){if(!await flushAnnotationChanges())return;selectNote(note);annotationEditor.placing=false;annotationEditor.preview=null;updateAnnotationControls();drawOverlay();$('annotationText').focus();$('annotationText').select()}
+})
 $('armCalibration').addEventListener('click', () => {
   if (!state.page) return
   state.armed = !state.armed
@@ -1316,3 +1352,161 @@ $('toggleTracksPanel').onclick = () => state.logs.some(log => log.visible) ? hid
 $('openTracksPanel').onclick = () => setTracksPanel(!tracksPanelOpen)
 $('showTracksPanel').onclick = () => setTracksPanel(true)
 $('closeTracksPanel').onclick = () => setTracksPanel(false)
+
+function closeAnnotationEditor() {
+  clearTimeout(annotationSaveTimer)
+  annotationEditor.file = null; annotationEditor.selected = null; annotationEditor.placing = false; annotationEditor.preview = null
+  $('annotationsPanel').classList.add('hidden'); overlay.classList.remove('placing-annotation')
+}
+async function openAnnotationEditor(file, page = 1) {
+  if (annotationEditor.loading) return
+  if (!await flushAnnotationChanges()) return
+  annotationEditor.loading = true
+  annotationEditor.file = file; annotationEditor.page = page; annotationEditor.selected = null; annotationEditor.placing = false
+  $('annotationsPanel').classList.remove('hidden'); $('annotationStatus').textContent = 'Öppnar manus…'
+  updateAnnotationControls()
+  const opened = await loadPdfFile(file,page,true)
+  annotationEditor.loading = false
+  if (!opened || annotationEditor.file !== file) { if (!opened) closeAnnotationEditor(); return }
+  $('annotationFileName').textContent = file.name
+  clearNoteSelection()
+  $('annotationsPanel').scrollIntoView({block:'nearest'})
+}
+function updateAnnotationControls() {
+  const busy = annotationEditor.loading || annotationEditor.saving
+  for(const id of ['annotationText','annotationSize','annotationColor']) $(id).disabled = annotationEditor.loading
+  for(const id of ['placeAnnotation','newAnnotation','exportManuscriptPdf']) $(id).disabled = busy
+  $('cancelAnnotation').classList.toggle('hidden',!annotationEditor.placing)
+  $('placeAnnotation').classList.toggle('armed',annotationEditor.placing)
+  $('placeAnnotation').textContent = annotationEditor.selected ? 'Flytta i manuset' : 'Placera i manuset'
+  overlay.classList.toggle('placing-annotation',annotationEditor.placing)
+}
+function clearNoteSelection() {
+  annotationEditor.selected = null; annotationEditor.placing = false; annotationEditor.preview=null
+  $('annotationText').value = ''; $('annotationStatus').textContent = 'Skriv text och välj Placera i manuset. Klicka på en text för att flytta, dubbelklicka för att ändra.'
+  updateAnnotationControls(); renderNoteList()
+}
+function noteDraft() {
+  const text = $('annotationText').value.trim(), size = Number($('annotationSize').value), color = $('annotationColor').value
+  if(!text) throw new Error('Skriv text eller siffror först.')
+  if(!Number.isFinite(size) || size<6 || size>72) throw new Error('Textstorleken måste vara 6–72.')
+  return {text,size,color}
+}
+function renderNoteList() {
+  const notes = annotationEditor.file?.annotations || []
+  $('annotationList').innerHTML = notes.filter(note=>note.page===annotationEditor.page).map(note=>`<div class="annotation-row"><button class="small-button" data-edit-note="${escapeHtml(note.id)}" title="Ändra anteckning">${escapeHtml(note.text)}</button><button class="small-button" data-delete-note="${escapeHtml(note.id)}" aria-label="Ta bort ${escapeHtml(note.text)}">×</button></div>`).join('')
+  $('annotationList').querySelectorAll('[data-edit-note]').forEach(button=>button.onclick=async()=>{
+    if(!await flushAnnotationChanges())return
+    const note=notes.find(note=>note.id===button.dataset.editNote)
+    selectNote(note);$('annotationText').focus()
+  })
+  $('annotationList').querySelectorAll('[data-delete-note]').forEach(button=>button.onclick=async()=>{
+    if(!await flushAnnotationChanges())return
+    if(await persistManuscriptNotes(annotationEditor.file,notes.filter(note=>note.id!==button.dataset.deleteNote))) clearNoteSelection()
+  })
+}
+async function persistManuscriptNotes(file, notes) {
+  annotationEditor.saving=true;updateAnnotationControls();$('annotationStatus').textContent='Sparar…'
+  try {
+    const operation=window.sjomatning.updateLibraryFile(file.id,{annotations:notes})
+    annotationWritePromise=operation.catch(()=>{})
+    const record=await operation
+    file.annotations=record.annotations;file.annotatedRaster=null
+    drawOverlay();scheduleMapDraw();renderNoteList();$('annotationStatus').textContent='Anteckningarna är sparade.'
+    return true
+  } catch(error) { $('annotationStatus').textContent=`Kunde inte spara: ${error.message}`; return false }
+  finally {annotationEditor.saving=false;updateAnnotationControls()}
+}
+function notePosition(draft, point) {
+  const ctx=overlay.getContext('2d'),fontSize=draft.size*annotationEditor.fontScale,lines=draft.text.split('\n')
+  ctx.save();ctx.font=`${fontSize}px Arial`;const width=Math.max(...lines.map(line=>ctx.measureText(line).width));ctx.restore()
+  const below=(lines.length-1)*fontSize*1.25+fontSize*.25
+  if(width>state.width || fontSize+below>state.height)throw new Error('Texten ryms inte på sidan. Minska textstorleken eller dela upp texten.')
+  return {x:Math.max(0,Math.min(state.width-width,point.x))/state.width,y:Math.max(fontSize,Math.min(state.height-below,point.y))/state.height}
+}
+async function placeManuscriptNote(point) {
+  clearTimeout(annotationSaveTimer)
+  if(annotationEditor.saving || !annotationEditor.file || state.map)return
+  try {
+    if(point.x<0||point.y<0||point.x>state.width||point.y>state.height)return
+    const draft=noteDraft(),note={...draft,...notePosition(draft,point),id:annotationEditor.selected || crypto.randomUUID(),page:annotationEditor.page}
+    const notes=[...(annotationEditor.file.annotations || [])],index=notes.findIndex(item=>item.id===note.id)
+    if(index<0)notes.push(note);else notes[index]=note
+    annotationEditor.placing=false;annotationEditor.preview=null
+    if(await persistManuscriptNotes(annotationEditor.file,notes)) { annotationEditor.selected=note.id;updateAnnotationControls() }
+  } catch(error) {toast(error.message)}
+}
+function paintNotes(context, notes, page, width, height, scale) {
+  context.save();context.textBaseline='alphabetic'
+  for(const note of notes.filter(note=>note.page===page)) {
+    context.fillStyle=note.color;context.font=`${note.size*scale}px Arial`
+    note.text.split('\n').forEach((line,i)=>context.fillText(line,note.x*width,note.y*height+i*note.size*scale*1.25))
+  }
+  context.restore()
+}
+function drawManuscriptNotes(context) {
+  if(state.map || !state.activePdfId)return
+  const file=state.library.pdfs.find(file=>file.id===state.activePdfId)
+  let notes=file?.annotations || []
+  if(annotationEditor.file===file && annotationEditor.placing && annotationEditor.preview) {
+    try {const draft=noteDraft(),preview={...draft,...notePosition(draft,annotationEditor.preview),page:1};notes=[...notes.filter(note=>note.id!==annotationEditor.selected),preview]}catch{}
+  }
+  paintNotes(context,notes,state.pageNumber || 1,state.width,state.height,annotationEditor.fontScale)
+}
+function selectNote(note) {
+  annotationEditor.selected=note.id;annotationEditor.placing=false;annotationEditor.preview=null
+  $('annotationText').value=note.text;$('annotationSize').value=note.size;$('annotationColor').value=note.color
+  $('annotationStatus').textContent='Ändringar sparas automatiskt.';updateAnnotationControls();drawOverlay()
+}
+function noteAtPoint(point) {
+  const ctx=overlay.getContext('2d'),notes=annotationEditor.file?.annotations || []
+  return [...notes].reverse().find(note=>{
+    const size=note.size*annotationEditor.fontScale,lines=note.text.split('\n')
+    ctx.font=`${size}px Arial`
+    const width=Math.max(...lines.map(line=>ctx.measureText(line).width)),x=note.x*state.width,y=note.y*state.height
+    return note.page===1 && point.x>=x-3 && point.x<=x+width+3 && point.y>=y-size && point.y<=y+(lines.length-1)*size*1.25+size*.25
+  })
+}
+async function flushAnnotationChanges() {
+  clearTimeout(annotationSaveTimer)
+  await annotationSavePromise
+  await annotationWritePromise
+  if(!annotationEditor.file || !annotationEditor.selected)return true
+  const file=annotationEditor.file,existing=file.annotations?.find(note=>note.id===annotationEditor.selected)
+  if(!existing)return true
+  try {
+    const draft=noteDraft()
+    if(draft.text===existing.text && draft.size===existing.size && draft.color===existing.color)return true
+    const position=notePosition(draft,{x:existing.x*state.width,y:existing.y*state.height})
+    annotationSavePromise=persistManuscriptNotes(file,file.annotations.map(note=>note.id===existing.id?{...note,...draft,...position}:note))
+    return await annotationSavePromise
+  } catch(error) {$('annotationStatus').textContent=error.message;return false}
+}
+for(const id of ['annotationText','annotationSize','annotationColor']) $(id).addEventListener('input',()=>{
+  if(annotationEditor.placing)drawOverlay()
+  if(!annotationEditor.selected)return
+  clearTimeout(annotationSaveTimer);$('annotationStatus').textContent='Sparar snart…'
+  annotationSaveTimer=setTimeout(()=>void flushAnnotationChanges(),450)
+})
+$('newAnnotation').onclick=async()=>{if(await flushAnnotationChanges())clearNoteSelection()}
+$('cancelAnnotation').onclick=()=>{annotationEditor.placing=false;annotationEditor.preview=null;updateAnnotationControls();drawOverlay();$('annotationStatus').textContent='Placeringen avbröts.'}
+$('placeAnnotation').onclick=()=>{try{noteDraft();annotationEditor.placing=true;annotationEditor.preview=null;state.armed=false;updateAnnotationControls();$('annotationStatus').textContent='Klicka där texten ska stå i manuset.'}catch(error){toast(error.message)}}
+$('exportManuscriptPdf').onclick=async()=>{
+  if(!await flushAnnotationChanges())return
+  const file=annotationEditor.file;if(!file || annotationEditor.saving)return
+  $('exportManuscriptPdf').disabled=true;$('annotationStatus').textContent='Skapar PDF…'
+  try {const path=await window.sjomatning.exportManuscriptPdf(file.id);$('annotationStatus').textContent=path?`PDF sparad: ${path}`:'Exporten avbröts.'}
+  catch(error){$('annotationStatus').textContent=`Kunde inte exportera: ${error.message}`}
+  finally{$('exportManuscriptPdf').disabled=false}
+}
+
+function manuscriptImage(file) {
+  if(!file.annotations?.some(note=>note.page===1))return file.mapRaster.canvas
+  if(file.annotatedRaster?.source===file.mapRaster && file.annotatedRaster?.notes===file.annotations)return file.annotatedRaster.canvas
+  const source=file.mapRaster.canvas,canvas=document.createElement('canvas')
+  canvas.width=source.width;canvas.height=source.height
+  const context=canvas.getContext('2d');context.drawImage(source,0,0)
+  paintNotes(context,file.annotations,1,canvas.width,canvas.height,file.mapRaster.noteScale)
+  file.annotatedRaster={source:file.mapRaster,notes:file.annotations,canvas}
+  return canvas
+}

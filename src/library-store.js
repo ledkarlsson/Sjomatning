@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const { validateAnnotations } = require('./manuscript-annotations')
 
 function createLibraryStore(rootPath) {
   const filesPath = path.join(rootPath, 'files')
@@ -83,6 +84,10 @@ function createLibraryStore(rootPath) {
       if (!name || /[\\/:*?"<>|\x00-\x1f]/.test(name) || name.length > 240) throw new Error('Ogiltigt filnamn.')
       record.originalName ||= record.name
       record.name = name.toLowerCase().endsWith(record.extension) ? name : name + record.extension
+    }
+    if (changes.annotations !== undefined) {
+      if (!/\.(pdf|kap|wci)$/i.test(record.extension)) throw new Error('Anteckningar kräver ett fältmanus.')
+      record.annotations = validateAnnotations(changes.annotations)
     }
     if (changes.edits !== undefined) record.edits = changes.edits
     await writeIndex(records)

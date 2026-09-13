@@ -43,6 +43,18 @@
           </div>
         </section>
 
+        <section id="annotationsPanel" class="panel hidden">
+          <h2>Anteckningar i fältmanus</h2>
+          <p id="annotationFileName" class="muted"></p>
+          <label>Text<textarea id="annotationText" rows="3" maxlength="2000" placeholder="Till exempel 4,2 eller Kontrollmät här"></textarea></label>
+          <div class="coordinate-grid"><label>Textstorlek<input id="annotationSize" type="number" min="6" max="72" value="12"></label><label>Färg<input id="annotationColor" type="color" value="#c62828"></label></div>
+          <button id="placeAnnotation" class="button wide">Placera i manuset</button>
+          <div class="annotation-actions"><button id="newAnnotation" class="small-button">Ny anteckning</button><button id="cancelAnnotation" class="small-button hidden">Avbryt placering</button></div>
+          <p id="annotationStatus" class="muted" role="status"></p>
+          <div id="annotationList" class="annotation-list"></div>
+          <button id="exportManuscriptPdf" class="button wide secondary">Exportera ny PDF</button>
+        </section>
+
         <section class="panel intro" id="introPanel">
           <div class="panel-help"><button type="button" class="help-button" aria-label="Hjälp" aria-describedby="introPanelHelp">?</button><span id="introPanelHelp" class="help-text" role="tooltip">Öppna ett PDF-manus. Georeferering läses automatiskt när den finns.</span></div>
           <span class="step-number">1</span>

@@ -13,13 +13,15 @@
     "package": "electron-builder --dir",
     "make": "electron-builder --win nsis --publish never",
     "test": "node --test",
+    "test:annotations-ui": "electron scripts/annotations-ui-regression.cjs",
     "test:library-ui": "electron scripts/library-ui-regression.cjs",
     "test:seaclear-ui": "electron scripts/seaclear-ui-regression.cjs",
     "test:map-ui": "electron scripts/map-ui-regression.cjs",
-    "lint": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/nmea-parser.mjs && node --check src/track-parser.mjs && node --check src/track-processing.mjs && node --check src/web-map.mjs && node --check src/roxen-level.js && node --check src/library-store.js && node --check src/raster-chart.mjs && node --check src/track-view.mjs && node --check src/bsb-index.js"
+    "lint": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/nmea-parser.mjs && node --check src/track-parser.mjs && node --check src/track-processing.mjs && node --check src/web-map.mjs && node --check src/roxen-level.js && node --check src/library-store.js && node --check src/raster-chart.mjs && node --check src/track-view.mjs && node --check src/bsb-index.js && node --check src/manuscript-annotations.js"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
