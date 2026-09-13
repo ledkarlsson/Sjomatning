@@ -308,4 +308,18 @@ Som ny användare behöver jag hjälp att förstå varför samlingsfilen skiljer
 
 **P3 – Ge en kort vägledning för första arbetsuppgiften.** Startvyn domineras av bibliotek, vattenstånd och GPS-anslutning, medan jämförelsen ligger inne i spårpanelen. Erbjud en kort introduktion: **Hitta område → Välj spår → Jämför → Granska avvikelser**. Lägg en tydlig ingång till att granska befintliga mätningar nära liveflödet. **Frågor:** ”Måste jag ansluta GPS för att använda appen? Behöver jag ett fältmanus för att jämföra? Vad gör jag först?” **Klart när:** en ny användare kan börja med befintliga spår utan instruktioner från någon annan.
 
-Förslagen ovan är en granskningslista, inte genomförda ändringar. Högst nytta först: synliga filnamn, tydlig jämförelseomfattning och särskiljbara spårfärger. Följ upp med ett separat prov från tomt bibliotek och ett komplett import–jämförelse–export-flöde.
+Förslagen ovan bevaras som underlag från användarutvärderingen. Ändringarna nedan är genomförda efter genomgången.
+
+### Åtgärdat efter användarutvärderingen
+
+- Bibliotekets kort visar namn ovanför knapparna, med radbrytning och reservnamn, format och område från filnamnet. Ta bort-knappen namnger filen.
+- Jämförelsen startar med **Aktuellt kartutsnitt** och begränsar båda spårens punkter till utsnittet. **Alla påslagna spår** och **Valda spår** använder hela spåren. Omfattning och antal visas före resultaten; valda spår kan även vara dolda. Rader utan matchningar visas uttryckligen med noll träffar.
+- Spårfärgerna upprepas inte längre efter fem spår. Linjer växlar mellan heldragna och streckade, och fokus/pekare på en legendrad förstärker spåret på kartan. Vid granskning av ett matchningspar får de två spåren turkos respektive röd färg.
+- Jämförelsen visar matchade/möjliga punkter, procent, median och intervallet P10–P90 samt använda djupjusteringar. Metodförklaringen ligger vid inställningarna. **Visa matchningar på kartan** visar lila ringar och förbindelser utan att ändra mätvärden.
+- **Tillbaka till jämförelsen** finns från punktgranskning och matchningskartan. Referens, radie, spårval och skrollpositioner bevaras. Stängknapp, jämförelsehuvud och tabellrubriker hålls synliga vid skrollning.
+- Kartverktygsrad och spårpanel använder samma räknare: spår i området, visade och dolda. Panelen anger också hur många inlästa spår som ligger utanför området och har **Visa endast detta spår**.
+- Referensval visar datum, båt/område tolkat ur filnamnet, format, punktantal och fullständigt filnamn. Möjliga filvarianter markeras och grupperas i spårvalet. Samlingsfiler märks som innehållsmässigt overifierade; inga filer slås ihop automatiskt.
+- Djupberäkning, vattennivåkälla och separat nivådatum visas vid jämförelse och punktgranskning. Nivådatum sparas för nya vattennivåhämtningar; äldre poster utan sparat datum anges som **inte sparat**. Beräknade tabellvärden använder svensk decimalformatering. Numeriska inmatningsfält följer operativsystemets format.
+- En introduktion **Hitta område → Välj spår → Jämför → Granska avvikelser** ger en direkt ingång till jämförelsen och förklarar att GPS och fältmanus inte krävs.
+
+`npm run test:feedback-ui` använder syntetiska spår med punkter både inom och utanför Roxen för att verifiera omfattning, filvarianter, val av två spår och radievalidering. `npm run test:library-ui` täcker även matchningskartan och återgång från punktgranskning. De kör med isolerat bibliotek. Det observerade teckenfelet i Lindöfilnamnet har ingen fastställd källa och ändras därför inte automatiskt. Ett komplett manuellt import–jämförelse–export-prov återstår som uppföljning.

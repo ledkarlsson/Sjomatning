@@ -14,6 +14,7 @@
     "make": "electron-builder --win nsis --publish never",
     "test": "node --test",
     "test:annotations-ui": "electron scripts/annotations-ui-regression.cjs",
+    "test:feedback-ui": "electron scripts/feedback-ui-regression.cjs",
     "test:library-ui": "electron scripts/library-ui-regression.cjs",
     "test:seaclear-ui": "electron scripts/seaclear-ui-regression.cjs",
     "test:map-ui": "electron scripts/map-ui-regression.cjs",

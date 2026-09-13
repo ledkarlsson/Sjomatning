@@ -9,7 +9,21 @@ import { parseNmeaSentence } from './nmea-parser.mjs'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
-const colors = ['#e14b3b', '#087f8c', '#7855a6', '#d58416', '#2e6db4']
+const colors = Array.from({length: 360}, (_, i) => `hsl(${(i * 137.508) % 360} 70% 38%)`)
+let focusedTrack = null
+let comparison = null
+let comparisonMatches = null
+const decimal = value => Number(value).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+const fileLabel = file => file.name?.trim() || file.originalName || file.relativePath?.split(/[\\/]/).pop() || `Fältmanus ${file.id || ''}`
+function depthExplanation(log) {
+  const source = {roxen: 'Tekniska verken', manual: 'Manuellt angiven', filename: 'Filnamnet'}[log.waterLevelSource] || 'Filnamnet / okänd källa'
+  return `Justerat djup = rådjup − ${decimal(log.correction || 0)} m + ${decimal(log.depthAdjustment || 0)} m. Vattennivå: ${log.waterLevel == null ? 'saknas; ingen vattenståndskorrektion' : decimal(log.waterLevel) + ' m'}, källa: ${source}, nivådatum: ${log.waterLevelDate || (log.waterLevelSource === 'filename' ? trackDate(log) : null) || 'inte sparat'}. Mätdatum: ${trackDate(log) || 'okänt'}. Referens: 33,00 m RH00. Gallring påverkar visning/export, inte jämförelsen.`
+}
+function trackLabel(log) {
+  const name = log.name || 'Namnlöst spår'
+  const parts = name.replace(/\.[^.]+$/, '').replace(/^\d{8}[_ ](?:\d+\.\d+[_ ])?/, '').split(/[_ ]+/)
+  return `${trackDate(log) || 'Okänt datum'} · Båt/område från filnamn: ${parts.join(' · ')} · ${name.split('.').pop().toUpperCase()} · ${log.points.length} punkter${/^all_/i.test(name) ? ' · Samlingsfil (innehåll ej verifierat)' : ''}`
+}
 const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, map: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, live: null, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
 const $ = id => document.getElementById(id)
 const pdfCanvas = $('pdfCanvas')
@@ -486,8 +500,8 @@ function renderFolder() {
   $('folderCount').textContent = `${folder.pdfs.length + folder.tracks.length} filer`
   const pdfCard = (file, index) => `
     <div class="folder-file-card">
-      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.error ? escapeHtml(file.error) : file.hasGeoData ? (file.chart ? file.chart.type.toUpperCase() + ' · Geodata' : 'GeoPDF') : 'Utan geodata'}</i></span></div>
-      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-annotate-pdf="${index}" ${file.error ? 'disabled' : ''}>Anteckna</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort fältmanus">×</button></div>
+      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(fileLabel(file))}</strong><span>${escapeHtml(file.chart?.type?.toUpperCase() || 'PDF')} · Område: ${escapeHtml(manuscriptName(fileLabel(file)))} · ${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.error ? escapeHtml(file.error) : file.hasGeoData ? (file.chart ? file.chart.type.toUpperCase() + ' · Geodata' : 'GeoPDF') : 'Utan geodata'}</i></span></div>
+      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-annotate-pdf="${index}" ${file.error ? 'disabled' : ''}>Anteckna</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort ${escapeHtml(fileLabel(file))}" aria-label="Ta bort ${escapeHtml(fileLabel(file))}">×</button></div>
     </div>`
   const pdfGroups = [
     ['Med geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => item.file.hasGeoData)],
@@ -645,7 +659,7 @@ function drawOverlay() {
 
   if (!state.transform) { drawManuscriptNotes(context); return }
   let min=Infinity,max=-Infinity
-  const visible=state.logs.filter(log=>log.visible)
+  const visible=state.logs.filter(log=>log.visible).sort((a,b)=>Number(a===focusedTrack)-Number(b===focusedTrack))
   for(const log of visible) { const root=pointIndex(log,true).root; if(root){min=Math.min(min,correctedDepth(log,{depth:root.min}));max=Math.max(max,correctedDepth(log,{depth:root.max}))} }
   let drawn=0
   for(const log of visible) {
@@ -661,13 +675,23 @@ function drawOverlay() {
       else context.moveTo(pixel.x,pixel.y)
       previous = {...pixel,index:sample.index}
     }
-    context.strokeStyle=log.color;context.globalAlpha=.72;context.lineWidth=2.2/state.scale;context.stroke();context.globalAlpha=1
+    context.setLineDash(trackColors && state.logs.indexOf(log) % 2 ? [7/state.scale,4/state.scale] : []);context.strokeStyle=log.color;context.globalAlpha=focusedTrack && focusedTrack !== log ? .2 : .85;context.lineWidth=(focusedTrack === log ? 5 : 2.2)/state.scale;context.stroke();context.setLineDash([]);context.globalAlpha=1
     for(const {point} of samples) {
       const pixel=geoToPixel(point.lat,point.lon)
       if(!pixel)continue
-      context.beginPath();context.arc(pixel.x,pixel.y,2.4/state.scale,0,Math.PI*2)
+      context.beginPath();context.arc(pixel.x,pixel.y,(focusedTrack===log?4:2.4)/state.scale,0,Math.PI*2)
       context.fillStyle=trackColors?log.color:depthColor(correctedDepth(log,point),min,max);context.fill();drawn++
     }
+  }
+  if (comparisonMatches) {
+    context.save(); context.strokeStyle='#b000d4'; context.lineWidth=2/state.scale
+    for (const pair of comparisonMatches.pairs) {
+      const a=comparisonMatches.track.points[pair.index], b=comparisonMatches.reference.points[pair.referenceIndex]
+      const x=geoToPixel(a.lat,a.lon), y=geoToPixel(b.lat,b.lon)
+      context.beginPath();context.moveTo(x.x,x.y);context.lineTo(y.x,y.y);context.stroke()
+      context.beginPath();context.arc(x.x,x.y,5/state.scale,0,Math.PI*2);context.stroke()
+    }
+    context.restore()
   }
   overlay.dataset.renderedPoints=String(drawn)
   if (state.live?.simulated && state.live.position) {
@@ -696,6 +720,7 @@ async function applyAutomaticWaterLevel(log) {
   if (!result?.ok || log.waterLevelSource !== sourceBeforeRequest) return false
   log.waterLevel = result.data.level
   log.waterLevelSource = 'roxen'
+  log.waterLevelDate = result.data.date || date
   log.correction = Math.round((result.data.level - 33) * 100) / 100
   return true
 }
@@ -703,14 +728,14 @@ async function applyAutomaticWaterLevel(log) {
 function renderLogs() {
   $('logsPanel').classList.toggle('hidden', !tracksPanelOpen)
   const fittingLogs = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0)
-  $('toggleTracksPanel').textContent = `${state.logs.some(log => log.visible) ? 'Dölj' : 'Visa'} spår (${fittingLogs.length} i bild)`
+  $('toggleTracksPanel').textContent = `${state.logs.some(log => log.visible) ? 'Dölj' : 'Visa'} spår (${fittingLogs.length} spår i området · ${fittingLogs.filter(log => log.visible).length} visas · ${fittingLogs.filter(log => !log.visible).length} dolt)`
   $('toggleTracksPanel').setAttribute('aria-pressed', String(state.logs.some(log => log.visible)))
   $('openTracksPanel').setAttribute('aria-expanded', String(tracksPanelOpen))
   renderTrackLegend()
   $('applyWaterLevel').classList.toggle('hidden', !state.roxenLevel || state.logs.length === 0)
   if (state.transform) {
     const fitting = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0).length
-    $('logsMapSummary').textContent = `${fitting} av ${state.logs.length} spår har punkter som ryms i den aktiva kartan.`
+    $('logsMapSummary').textContent = `${fitting} spår i området · ${fittingLogs.filter(log => log.visible).length} visas · ${fittingLogs.filter(log => !log.visible).length} dolt. ${state.logs.length - fitting} inlästa spår utanför området.`
   } else $('logsMapSummary').textContent = 'Aktivera geodata för att se vilka spår som ryms i kartan.'
   $('logList').innerHTML = state.logs.map((log, index) => {
     if (!fittingLogs.includes(log)) return ''
@@ -726,7 +751,7 @@ function renderLogs() {
         <label>Djupjustering (m)<input type="number" step="0.01" data-depth-adjustment="${index}" value="${(log.depthAdjustment || 0).toFixed(2)}"></label>
         <label>Glesa, avstånd (m)<input type="number" min="0" max="500" step="1" data-prune-distance="${index}" value="${log.pruneDistance || 0}"></label>
       </div>
-      <button class="small-button" data-table-log="${index}">Info och punkttabell</button><button class="small-button" data-restore-log="${index}">Återställ original</button>
+      <button class="small-button" data-only-log="${index}">Visa endast detta spår</button><button class="small-button" data-table-log="${index}">Info och punkttabell</button><button class="small-button" data-restore-log="${index}">Återställ original</button>
 
     </div>`
   }).join('')
@@ -734,6 +759,7 @@ function renderLogs() {
     state.logs[Number(event.target.dataset.log)].visible = event.target.checked
     renderFolder(); renderLogs(); drawOverlay()
   }))
+  document.querySelectorAll('[data-only-log]').forEach(button => button.onclick = () => { state.logs.forEach((log, i) => { log.visible = i === Number(button.dataset.onlyLog) }); renderFolder(); renderLogs(); drawOverlay() })
   document.querySelectorAll('[data-table-log]').forEach(button => button.onclick = () => showTrackEditor(Number(button.dataset.tableLog)))
   document.querySelectorAll('[data-restore-log]').forEach(button => button.onclick = () => restoreTrack(Number(button.dataset.restoreLog)))
   document.querySelectorAll('[data-water-level]').forEach(input => input.addEventListener('change', event => {
@@ -741,6 +767,7 @@ function renderLogs() {
     const level = Number(event.target.value)
     log.waterLevel = event.target.value === '' || !Number.isFinite(level) ? null : level
     log.waterLevelSource = 'manual'
+    log.waterLevelDate = null
     log.correction = log.waterLevel == null ? null : Math.round((log.waterLevel - 33) * 100) / 100
     saveTrack(log); renderLogs(); drawOverlay()
   }))
@@ -805,6 +832,7 @@ function applyWaterLevel() {
   state.logs.forEach(log => {
     log.waterLevel = state.roxenLevel.level
     log.waterLevelSource = 'roxen'
+    log.waterLevelDate = state.roxenLevel.date
     log.correction = Math.round((state.roxenLevel.level - 33) * 100) / 100
     saveTrack(log)
   })
@@ -1271,7 +1299,7 @@ async function renameFile(type, index) {
 function saveTrack(log) {
   pointIndexes.delete(log)
   if (!log.sourceId) return
-  const edits = structuredClone({ points: log.points, waterLevel: log.waterLevel, waterLevelSource: log.waterLevelSource, correction: log.correction, depthAdjustment: log.depthAdjustment || 0, pruneDistance: log.pruneDistance || 0 })
+  const edits = structuredClone({ points: log.points, waterLevel: log.waterLevel, waterLevelSource: log.waterLevelSource, waterLevelDate: log.waterLevelDate, correction: log.correction, depthAdjustment: log.depthAdjustment || 0, pruneDistance: log.pruneDistance || 0 })
   const file = state.library.tracks.find(file => file.id === log.sourceId)
   if (file) file.edits = edits
   void window.sjomatning.updateLibraryFile(log.sourceId, { edits }).catch(error => toast(`Ändringen kunde inte sparas: ${error.message}`))
@@ -1286,7 +1314,7 @@ async function restoreTrack(index) {
   if (!window.confirm(`Återställ alla punkter och justeringar i ${log.name} från originalfilen?`)) return
   try {
     await window.sjomatning.updateLibraryFile(log.sourceId, { edits: null })
-    Object.assign(log, structuredClone(original), { name: file.name, waterLevelSource: 'filename', depthAdjustment: 0, pruneDistance: 0 })
+    Object.assign(log, structuredClone(original), { name: file.name, waterLevelSource: 'filename', waterLevelDate: null, depthAdjustment: 0, pruneDistance: 0 })
     file.edits = null
     renderLogs(); renderFolder(); drawOverlay()
   } catch (error) { toast(`Kunde inte återställa: ${error.message}`) }
@@ -1298,10 +1326,11 @@ function showTrackEditor(index, page = 0) {
   const editable = Boolean(log.sourceId)
   $('editorContent').innerHTML = `<h2>${escapeHtml(log.name)}</h2><p>${log.points.length} punkter. ${fitText(log)}. Djup korrigeras till Hydrographicas referensnivå 33,00 m RH00.</p>
     <label>Justera hela spårets djup (m)<input id="tableAdjustment" type="number" step="0.01" value="${log.depthAdjustment || 0}" ${editable ? '' : 'disabled'}></label>
-    <p>${editable ? 'Ändra rådjup eller koordinater direkt i tabellen. Originalfilen finns kvar och kan återställas.' : 'Pågående livespår: stoppa mätningen för att spara i biblioteket och redigera punkter.'}</p>
-    <table><thead><tr><th>Punkt / tid</th><th>Latitud</th><th>Longitud</th><th>Rådjup (m)</th><th>Justerat (m)</th><th></th></tr></thead><tbody>${log.points.slice(start, start + 100).map((point, n) => `<tr><td>${start + n + 1}<br>${escapeHtml(point.date)} ${escapeHtml(point.time)}</td>${['lat','lon','depth'].map(field => `<td><input aria-label="${field} punkt ${start + n + 1}" type="number" step="${field === 'depth' ? '0.01' : '0.000001'}" value="${field === 'depth' ? point[field] : formatCoordinate(point, field)}" data-point="${start + n}" data-field="${field}" ${editable ? '' : 'disabled'}></td>`).join('')}<td>${correctedDepth(log, point).toFixed(2)}</td><td><button class="small-button" data-remove-point="${start + n}" ${editable ? '' : 'disabled'}>Ta bort</button></td></tr>`).join('')}</tbody></table>
+    <p>${escapeHtml(depthExplanation(log))}</p><p>${editable ? 'Ändra rådjup eller koordinater direkt i tabellen. Originalfilen finns kvar och kan återställas.' : 'Pågående livespår: stoppa mätningen för att spara i biblioteket och redigera punkter.'}</p>
+    <table><thead><tr><th>Punkt / tid</th><th>Latitud</th><th>Longitud</th><th>Rådjup (m)</th><th>Justerat (m)</th><th></th></tr></thead><tbody>${log.points.slice(start, start + 100).map((point, n) => `<tr><td>${start + n + 1}<br>${escapeHtml(point.date)} ${escapeHtml(point.time)}</td>${['lat','lon','depth'].map(field => `<td><input aria-label="${field} punkt ${start + n + 1}" type="number" step="${field === 'depth' ? '0.01' : '0.000001'}" value="${field === 'depth' ? point[field] : formatCoordinate(point, field)}" data-point="${start + n}" data-field="${field}" ${editable ? '' : 'disabled'}></td>`).join('')}<td>${decimal(correctedDepth(log, point))}</td><td><button class="small-button" data-remove-point="${start + n}" ${editable ? '' : 'disabled'}>Ta bort</button></td></tr>`).join('')}</tbody></table>
     <button id="previousPoints" class="small-button" ${page === 0 ? 'disabled' : ''}>Föregående</button> <span>Sida ${page + 1} av ${Math.max(1, Math.ceil(log.points.length / 100))}</span> <button id="nextPoints" class="small-button" ${start + 100 >= log.points.length ? 'disabled' : ''}>Nästa</button>`
   if (!$('editorDialog').open) $('editorDialog').showModal()
+  if (comparison) { $('editorContent').insertAdjacentHTML('afterbegin', '<button id="backComparison" class="small-button">Tillbaka till jämförelsen</button>'); $('backComparison').onclick = () => showComparison(true) }
   const refresh = () => { saveTrack(log); renderLogs(); drawOverlay(); showTrackEditor(index, Math.min(page, Math.max(0, Math.ceil(log.points.length / 100) - 1))) }
   $('tableAdjustment').onchange = event => {
     if (!event.target.value || !Number.isFinite(Number(event.target.value))) return
@@ -1318,26 +1347,61 @@ function showTrackEditor(index, page = 0) {
   $('nextPoints').onclick = () => showTrackEditor(index, page + 1)
 }
 
-function showComparison() {
-  const tracks = state.logs.filter(log => log.visible)
-  if (tracks.length < 2) return toast('Visa minst två spår för att jämföra.')
-  $('editorContent').innerHTML = `<h2>Jämför spår</h2><p>Jämför varje spår med ett referensspår. Närmaste punkt inom vald radie används. Positiv skillnad betyder djupare än referensen. Bottenlutning och olika körvägar kan också ge skillnader.</p><label>Referensspår<select id="referenceTrack">${tracks.map((log, i) => `<option value="${i}">${escapeHtml(log.name)}</option>`).join('')}</select></label><label>Maxavstånd mellan punkter (m)<input id="comparisonRadius" type="number" min="1" max="100" value="10"></label><div id="comparisonResults"></div>`
-  $('editorDialog').showModal()
-  const calculate = () => {
-    const radius = Number($('comparisonRadius').value)
-    if (!Number.isFinite(radius) || radius < 1 || radius > 100) return
-    const reference = tracks[Number($('referenceTrack').value)]
-    const rows = tracks.filter(log => log !== reference).map(log => ({ log, pairs: compareTrackPoints(reference, log, radius) })).filter(result => result.pairs.length > 0).sort((a, b) => b.pairs.length - a.pairs.length).map(({ log, pairs }) => {
-      const deltas = pairs.map(pair => pair.delta).sort((a,b) => a-b)
-      const median = deltas.length ? (deltas[Math.floor((deltas.length-1)/2)] + deltas[Math.floor(deltas.length/2)]) / 2 : null
-      return `<tr><td>${escapeHtml(log.name)}</td><td>${pairs.length}</td><td>${median == null ? 'Inga närliggande punkter' : median.toFixed(2) + ' m'}</td><td><button class="small-button" data-compare-edit="${state.logs.indexOf(log)}">Redigera punkter / justering</button></td></tr>`
-    })
-    $('comparisonResults').innerHTML = `<table><thead><tr><th>Spår</th><th>Matchade punkter</th><th>Median djupskillnad</th><th></th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="4">Inga matchande punkter inom vald radie.</td></tr>'}</tbody></table><p>Skillnaderna använder aktuella vattenstånds- och djupjusteringar, före gallring. Varje punkt matchas en gång; samma referenspunkt kan användas flera gånger.</p>`
-    document.querySelectorAll('[data-compare-edit]').forEach(button => button.onclick = () => showTrackEditor(Number(button.dataset.compareEdit)))
+function showComparison(resume = false) {
+  if (resume !== true || !comparison) comparison = {scope:'viewport', selected:state.logs.filter(log => log.visible && trackFit(log)?.inside > 0), radius:10, reference:null, scroll:0, resultsScroll:0, bounds: state.transform ? visibleBounds() : null}
+  const c = comparison
+  const inView = point => {
+    if (!c.bounds) return false
+    const pixel = geoToPixel(point.lat, point.lon)
+    if (!pixel) return false
+    if (state.map) return point.lon>=c.bounds.west && point.lon<=c.bounds.east && point.lat>=c.bounds.south && point.lat<=c.bounds.north
+    const x=pixel.x*state.scale+manuscriptOffset.x,y=pixel.y*state.scale+manuscriptOffset.y
+    return x>=0 && y>=0 && x<=viewportElement.clientWidth && y<=viewportElement.clientHeight
   }
-  $('referenceTrack').onchange = $('comparisonRadius').onchange = calculate
+  const tracks = state.logs.filter(log => c.scope === 'selected' ? c.selected.includes(log) : log.visible && (c.scope !== 'viewport' || log.points.some(inView)))
+  const scoped = log => ({...log, points:c.scope === 'viewport' ? log.points.filter(inView) : log.points})
+  if (!tracks.includes(c.reference)) c.reference = tracks[0]
+  const groups = new Map()
+  for (const log of state.logs) { const key=(log.name || '').replace(/\.[^.]+$/, '').toLowerCase(); if(!groups.has(key))groups.set(key,[]);groups.get(key).push(log) }
+  $('editorContent').innerHTML = `<div class="comparison-heading"><h2>Jämför spår</h2><label>Omfattning<select id="comparisonScope"><option value="viewport">Aktuellt kartutsnitt</option><option value="all">Alla påslagna spår</option><option value="selected">Valda spår</option></select></label><p>${tracks.length} spår · ${c.scope === 'viewport' ? 'Bara punkter i aktuellt kartutsnitt' : 'Hela spåren'}.</p><label>Referensspår<select id="referenceTrack">${[...tracks].sort((a,b)=>(a.name || '').localeCompare(b.name || '', 'sv')).map(log=>`<option value="${tracks.indexOf(log)}" title="${escapeHtml(log.name)}">${escapeHtml(trackLabel(log))}${(groups.get((log.name || '').replace(/\.[^.]+$/, '').toLowerCase())?.length || 0)>1 ? ' · Möjlig filvariant' : ''} — ${escapeHtml(log.name)}</option>`).join('')}</select></label></div>
+    ${c.scope === 'selected' ? `<fieldset><legend>Välj spår (även dolda kan väljas)</legend>${[...groups.values()].map(group=>`<div>${group.length>1?'<strong>Möjliga filvarianter; inte verifierade dubbletter</strong>':''}${group.map(log=>`<label title="${escapeHtml(log.name)}"><input type="checkbox" data-comparison-select="${state.logs.indexOf(log)}" ${c.selected.includes(log)?'checked':''}>${escapeHtml(trackLabel(log))} — ${escapeHtml(log.name)}</label>`).join('')}</div>`).join('')}</fieldset>` : ''}
+    <label>Maxavstånd mellan punkter (m)<input id="comparisonRadius" type="number" min="1" max="100" value="${c.radius}"></label>
+    <p>10 m är en sökradie, inte ett kvalitetsmått. Välj avstånd efter positionernas noggrannhet och bottenlutningen. Närmaste referenspunkt används och kan återanvändas. Jämförelsen använder aktuella vattenstånds- och djupjusteringar före gallring. Positiv skillnad betyder djupare än referensen. Median är mittenvärdet; intervallet P10–P90 omfattar de mittersta cirka 80 procenten. Körväg, botten och utrustning kan påverka resultatet.</p>
+    <p>${c.reference ? escapeHtml('Referens: '+depthExplanation(c.reference)) : 'Välj minst två spår.'}</p><div id="comparisonResults"></div>`
+  $('comparisonScope').value=c.scope
+  $('referenceTrack').value=String(tracks.indexOf(c.reference))
+  $('comparisonScope').onchange=event=>{c.scope=event.target.value;c.scroll=0;showComparison(true)}
+  document.querySelectorAll('[data-comparison-select]').forEach(input=>input.onchange=()=>{const log=state.logs[Number(input.dataset.comparisonSelect)];c.selected=input.checked?[...c.selected,log]:c.selected.filter(item=>item!==log);showComparison(true)})
+  const calculate = () => {
+    const radius=Number($('comparisonRadius').value)
+    if (!Number.isFinite(radius)||radius<1||radius>100) { $('comparisonResults').textContent='Ange ett maxavstånd mellan 1 och 100 m.';return }
+    c.radius=radius;c.reference=tracks[Number($('referenceTrack').value)]
+    if (!c.reference || tracks.length<2) { $('comparisonResults').textContent='Välj minst två spår för att jämföra.';return }
+    const reference=scoped(c.reference)
+    const results=tracks.filter(log=>log!==c.reference).map(log=>{const track=scoped(log);return {log,track,pairs:compareTrackPoints(reference,track,radius)}}).sort((a,b)=>b.pairs.length-a.pairs.length)
+    $('comparisonResults').innerHTML=`<table><thead><tr><th>Spår / justeringar</th><th>Matchade / möjliga</th><th>Median djupskillnad</th><th>Spridning P10–P90</th><th>Granska</th></tr></thead><tbody>${results.map(({log,track,pairs},i)=>{
+      const d=pairs.map(p=>p.delta).sort((a,b)=>a-b), median=d.length?(d[Math.floor((d.length-1)/2)]+d[Math.floor(d.length/2)])/2:null
+      return `<tr><td title="${escapeHtml(log.name)}">${escapeHtml(log.name)}<p>${escapeHtml(depthExplanation(log))}</p></td><td>${pairs.length} / ${track.points.length} (${decimal(track.points.length?100*pairs.length/track.points.length:0)} %)</td><td>${median==null?'Inga matchningar':decimal(median)+' m'}</td><td>${d.length?decimal(d[Math.floor((d.length-1)*.1)])+' – '+decimal(d[Math.ceil((d.length-1)*.9)])+' m':'–'}</td><td><button class="small-button" data-matches="${i}" ${pairs.length?'':'disabled'}>Visa matchningar på kartan</button><button class="small-button" data-compare-edit="${state.logs.indexOf(log)}">Redigera punkter / justering</button></td></tr>`
+    }).join('')}</tbody></table>`
+    document.querySelectorAll('[data-compare-edit]').forEach(button=>button.onclick=()=>{c.scroll=$('editorDialog').scrollTop;c.resultsScroll=$('comparisonResults').scrollTop;showTrackEditor(Number(button.dataset.compareEdit));$('editorDialog').scrollTop=0})
+    document.querySelectorAll('[data-matches]').forEach(button=>button.onclick=()=>{
+      c.scroll=$('editorDialog').scrollTop;c.resultsScroll=$('comparisonResults').scrollTop
+      const result=results[Number(button.dataset.matches)];comparisonMatches={...result,reference}
+      c.reference.visible=true;result.log.visible=true;c.reference.color='#087f8c';result.log.color='#e14b3b'
+      if(!trackColors)$('colorMode').click()
+      $('editorDialog').close();$('returnComparison').classList.remove('hidden');renderLogs();drawOverlay()
+      toast('Lila ringar och linjer visar matchade punkter. Återgå med Tillbaka till jämförelsen.')
+    })
+  }
+  $('referenceTrack').onchange=()=>{c.reference=tracks[Number($('referenceTrack').value)];showComparison(true)}
+  $('comparisonRadius').onchange=calculate
   calculate()
+  if (!$('editorDialog').open) $('editorDialog').showModal()
+  $('editorDialog').scrollTop=c.scroll
+  $('comparisonResults').scrollTop=c.resultsScroll || 0
 }
+$('returnComparison').onclick=()=>{comparisonMatches=null;$('returnComparison').classList.add('hidden');drawOverlay();showComparison(true)}
+$('reviewMeasurements').onclick=()=>{setTracksPanel(true);showComparison()}
 
 function updateMapReadout() {
   const live = state.live
@@ -1384,6 +1448,10 @@ function renderTrackLegend() {
   $('trackLegend').innerHTML = `<div class="legend-actions"><button id="legendShowAll" class="small-button">${eyeIcon(true)}Visa alla</button><button id="legendHideAll" class="small-button">${eyeIcon(false)}Dölj alla</button></div>` + logs.map(log => `<button class="legend-track ${log.visible ? '' : 'muted-track'}" data-legend-track="${state.logs.indexOf(log)}" title="${escapeHtml(log.name)}" aria-label="${log.visible ? 'Dölj' : 'Visa'} ${escapeHtml(log.name)}" aria-pressed="${log.visible}">${eyeIcon(log.visible)}<i style="background:${log.color}"></i><span>${escapeHtml(shortTrackName(log.name))}</span></button>`).join('')
   $('legendShowAll').onclick = showAllTracks
   $('legendHideAll').onclick = hideAllTracks
+  $('trackLegend').querySelectorAll('[data-legend-track]').forEach(button => {
+    button.onmouseenter=button.onfocus=()=>{focusedTrack=state.logs[Number(button.dataset.legendTrack)];drawOverlay()}
+    button.onmouseleave=button.onblur=()=>{focusedTrack=null;drawOverlay()}
+  })
   $('trackLegend').querySelectorAll('[data-legend-track]').forEach(button => button.onclick = () => {
     const log = state.logs[Number(button.dataset.legendTrack)]
     log.visible = !log.visible
