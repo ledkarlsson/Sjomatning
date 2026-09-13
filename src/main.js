@@ -11,6 +11,7 @@ const { expandChartIndexes: expandBsbIndexes } = require('./bsb-index')
 const expandChartIndexes = files => expandBsbIndexes(files, readSurveyFile)
 let libraryStore
 const liveSessions = new Map()
+const { recoverSessions, appendSample } = require('./live-storage')
 
 // Chromium-cachen hålls åtskild från appens beständiga data. Det undviker
 // låsta Cache/GPUCache-mappar vid uppdatering och snabb omstart på Windows.
@@ -204,11 +205,7 @@ ipcMain.handle('live:start', async (_event, metadata = {}) => {
 ipcMain.handle('live:append', async (_event, { id, raw, point }) => {
   const target = liveSessions.get(id)
   if (!target) throw new Error('Mätsessionen är inte aktiv.')
-  if (raw) await fs.appendFile(target.rawPath, `${String(raw).replace(/[\r\n]+/g, '')}\r\n`, 'utf8')
-  if (point) {
-    const values = [point.date, point.time, point.lat, point.lon, point.speed, point.depth]
-    if (values.slice(2).every(Number.isFinite)) await fs.appendFile(target.csvPath, `${values.join(',')}\r\n`, 'utf8')
-  }
+  await appendSample(target, raw, point)
   return true
 })
 
@@ -217,14 +214,17 @@ ipcMain.handle('live:stop', async (_event, id) => {
   if (!target) return null
   const file = await readSurveyFile(target.csvPath)
   file.name = `${path.basename(path.dirname(target.csvPath))}.csv`
-  await libraryStore.persist([file])
+  const hasPoints = file.bytes.toString('utf8').trim().split('\n').length > 1
+  if (hasPoints) await libraryStore.persist([file])
+  if (!target.failure) await fs.writeFile(path.join(path.dirname(target.csvPath), 'completed'), '')
   liveSessions.delete(id)
-  return file
+  return hasPoints ? file : null
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
   libraryStore = createLibraryStore(path.join(app.getPath('userData'), 'survey-library'))
+  await recoverSessions(path.join(app.getPath('userData'), 'measurements'), file => libraryStore.persist([file])).catch(error => dialog.showErrorBox('Kunde inte återställa mätning', error.message))
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => permission === 'serial')
   session.defaultSession.setDevicePermissionHandler(details => details.deviceType === 'serial')
   session.defaultSession.on('select-serial-port', (event, portList, _webContents, callback) => {

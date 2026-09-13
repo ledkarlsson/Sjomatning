@@ -12,9 +12,13 @@ function metadataFromName(name) {
 export function parseTextTrack(text, name) {
   const points = []
   const warnings = []
-  text.split(/\r\r?\n|\n|\r/).forEach((line, index) => {
+  const exported = text.replace(/^\uFEFF/, '').startsWith('Spår;Datum;')
+  const lines = exported ? (text.match(/(?:[^\r\n"]|"(?:[^"]|"")*")+/g) || []) : text.split(/\r\r?\n|\n|\r/)
+  lines.forEach((line, index) => {
     if (!line.trim()) return
-    const cells = line.split(',').map(value => value.trim())
+    if (exported && index === 0) return
+    let cells = exported ? (line.match(/(?:"(?:[^"]|"")*"|[^;]*)(?:;|$)/g) || []).slice(0, -1).map(v => v.replace(/;$/, '').replace(/^"|"$/g, '').replaceAll('""', '"')) : line.split(',').map(value => value.trim())
+    if (exported) cells = cells.slice(1, 7)
     if (cells[0] === 'Datum') return
     let date, time, lat, lon, speed, depth
     if (cells[0] === 'WP' && cells[1] === 'D') {
@@ -25,9 +29,9 @@ export function parseTextTrack(text, name) {
       depth = depthMatch ? Number(depthMatch[1].replace(',', '.')) : NaN
     } else if (cells.length === 6) {
       ;[date, time] = cells
-      ;[lat, lon, speed, depth] = cells.slice(2).map(Number)
+      ;[lat, lon, speed, depth] = cells.slice(2).map(value => value === '' ? null : Number(value))
     } else { warnings.push(index + 1); return }
-    if (![lat, lon, speed, depth].every(Number.isFinite)) { warnings.push(index + 1); return }
+    if (![lat, lon].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || ![speed, depth].every(v => v === null || Number.isFinite(v))) { warnings.push(index + 1); return }
     points.push({ date, time, lat, lon, speed, depth, coordinateText: { lat: cells[cells[0] === 'WP' ? 3 : 2], lon: cells[cells[0] === 'WP' ? 4 : 3] } })
   })
   if (!points.length) throw new Error(`${name} innehåller inga giltiga mätpunkter.`)

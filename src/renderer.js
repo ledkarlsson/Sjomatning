@@ -13,7 +13,7 @@ const colors = Array.from({length: 360}, (_, i) => `hsl(${(i * 137.508) % 360} 7
 let focusedTrack = null
 let comparison = null
 let comparisonMatches = null
-const decimal = value => Number(value).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+const decimal = value => !Number.isFinite(value) ? '–' : Number(value).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})
 const fileLabel = file => file.name?.trim() || file.originalName || file.relativePath?.split(/[\\/]/).pop() || `Fältmanus ${file.id || ''}`
 function depthExplanation(log) {
   const source = {roxen: 'Tekniska verken', manual: 'Manuellt angiven', filename: 'Filnamnet'}[log.waterLevelSource] || 'Filnamnet / okänd källa'
@@ -645,6 +645,7 @@ function fitView() {
 }
 
 function depthColor(depth, min, max) {
+  if (!Number.isFinite(depth)) return '#657780'
   const ratio = max === min ? .5 : Math.max(0, Math.min(1, (depth - min) / (max - min)))
   const stops = [[232, 71, 56], [244, 200, 74], [72, 167, 199], [24, 59, 115]]
   const scaled = ratio * (stops.length - 1)
@@ -657,6 +658,7 @@ function depthColor(depth, min, max) {
 function drawOverlay() {
   const context = overlay.getContext('2d')
   context.clearRect(0, 0, state.width, state.height)
+  delete overlay.dataset.boatX; delete overlay.dataset.boatY
 
   state.calibration.forEach((point, index) => {
     context.beginPath(); context.arc(point.x, point.y, 7, 0, Math.PI * 2)
@@ -667,7 +669,7 @@ function drawOverlay() {
   if (!state.transform) { drawManuscriptNotes(context); return }
   let min=Infinity,max=-Infinity
   const visible=state.logs.filter(log=>log.visible).sort((a,b)=>Number(a===focusedTrack)-Number(b===focusedTrack))
-  for(const log of visible) { const root=pointIndex(log,true).root; if(root){min=Math.min(min,correctedDepth(log,{depth:root.min}));max=Math.max(max,correctedDepth(log,{depth:root.max}))} }
+  for(const log of visible) { const root=pointIndex(log,true).root; if(Number.isFinite(root?.min)){min=Math.min(min,correctedDepth(log,{depth:root.min}));max=Math.max(max,correctedDepth(log,{depth:root.max}))} }
   let drawn=0
   for(const log of visible) {
     const samples=trackView(log)
@@ -701,12 +703,15 @@ function drawOverlay() {
     context.restore()
   }
   overlay.dataset.renderedPoints=String(drawn)
-  if (state.live?.simulated && state.live.position) {
+  if (state.live?.position && Date.now() - state.live.positionAt < 5000) {
     const pixel = geoToPixel(state.live.position.lat, state.live.position.lon)
     if (pixel) {
-      context.save(); context.translate(pixel.x, pixel.y); context.rotate((state.live.course || 0) * Math.PI / 180)
+      overlay.dataset.boatX = String(pixel.x); overlay.dataset.boatY = String(pixel.y)
+      context.save(); context.translate(pixel.x, pixel.y); context.rotate((Date.now() - state.live.speedAt < 5000 ? state.live.position.course || 0 : 0) * Math.PI / 180)
       const size = 12 / state.scale
-      context.beginPath(); context.moveTo(0, -size); context.lineTo(size * .65, size); context.lineTo(0, size * .55); context.lineTo(-size * .65, size); context.closePath()
+      context.beginPath();
+      if (!Number.isFinite(state.live.position.course) || Date.now() - state.live.speedAt >= 5000) context.arc(0, 0, size * .6, 0, Math.PI * 2)
+      else { context.moveTo(0, -size); context.lineTo(size * .65, size); context.lineTo(0, size * .55); context.lineTo(-size * .65, size); context.closePath() }
       context.fillStyle = '#087f8c'; context.fill(); context.strokeStyle = '#fff'; context.lineWidth = 2 / state.scale; context.stroke(); context.restore()
     }
   }
@@ -748,7 +753,7 @@ function renderLogs() {
     if (!fittingLogs.includes(log)) return ''
     const indexed = pointIndex(log,true)
     const visiblePoints = indexed.points
-    const depthRange = indexed.root ? `${correctedDepth(log,{depth:indexed.root.min}).toFixed(2)}–${correctedDepth(log,{depth:indexed.root.max}).toFixed(2)} m` : 'Inga punkter'
+    const depthRange = Number.isFinite(indexed.root?.min) ? `${correctedDepth(log,{depth:indexed.root.min}).toFixed(2)}–${correctedDepth(log,{depth:indexed.root.max}).toFixed(2)} m` : 'Djup saknas'
     const adjustment = log.depthAdjustment ? ` · extra justering ${log.depthAdjustment > 0 ? '+' : ''}${log.depthAdjustment.toFixed(2)} m` : ''
     return `<div class="log-card" style="--log-color:${log.color}">
       <label class="log-title"><input class="log-toggle" type="checkbox" data-log="${index}" ${log.visible ? 'checked' : ''}>${escapeHtml(log.name)}</label>
@@ -905,7 +910,7 @@ overlay.addEventListener('mousemove', event => {
     }
   })
   if (nearest) {
-    $('tooltip').innerHTML = `<strong>${escapeHtml(shortTrackName(nearest.log.name))}</strong><br>${correctedDepth(nearest.log, nearest.point).toFixed(2)} m<br>${escapeHtml([nearest.point.date, nearest.point.time].filter(Boolean).join(' '))}<br>Lat: ${formatCoordinate(nearest.point, 'lat')} · Long: ${formatCoordinate(nearest.point, 'lon')}${Number.isFinite(nearest.point.speed) && nearest.point.speed.toFixed(1) !== '0.0' ? '<br>' + nearest.point.speed.toFixed(1) + ' knop' : ''}`
+    $('tooltip').innerHTML = `<strong>${escapeHtml(shortTrackName(nearest.log.name))}</strong><br>${Number.isFinite(nearest.point.depth) ? correctedDepth(nearest.log, nearest.point).toFixed(2) + ' m' : 'Djup saknas'}<br>${escapeHtml([nearest.point.date, nearest.point.time].filter(Boolean).join(' '))}<br>Lat: ${formatCoordinate(nearest.point, 'lat')} · Long: ${formatCoordinate(nearest.point, 'lon')}${Number.isFinite(nearest.point.speed) && nearest.point.speed.toFixed(1) !== '0.0' ? '<br>' + nearest.point.speed.toFixed(1) + ' knop' : ''}`
     $('tooltip').style.left = `${event.clientX + 14}px`; $('tooltip').style.top = `${event.clientY + 14}px`
     $('tooltip').classList.remove('hidden')
   } else $('tooltip').classList.add('hidden')
@@ -1003,6 +1008,8 @@ viewportElement.addEventListener('pointermove', event => {
   if (!pan.moved && Math.hypot(event.clientX - pan.x, event.clientY - pan.y) < 4) return
   if (!pan.moved) {
     pan.moved = true
+    state.followBoat = false
+    $('followBoat').textContent = 'Följ båt'
     viewportElement.setPointerCapture(event.pointerId)
     viewportElement.classList.add('panning')
     $('tooltip').classList.add('hidden')
@@ -1098,8 +1105,8 @@ window.sjomatning.onUpdaterStatus(({ status, detail }) => {
 $('installUpdate').addEventListener('click', () => window.sjomatning.installUpdate())
 
 function nmeaTime(value) {
-  const digits = String(value || '').replace(/\D/g, '')
-  return digits.length >= 6 ? `${digits.slice(0, 2)}:${digits.slice(2, 4)}:${digits.slice(4, 6)}` : new Date().toLocaleTimeString('sv-SE')
+  const digits = String(value || '')
+  return /^\d{6}(\.\d+)?$/.test(digits) ? `${digits.slice(0, 2)}:${digits.slice(2, 4)}:${digits.slice(4)}` : new Date().toLocaleTimeString('sv-SE')
 }
 
 function today() { return new Date().toLocaleDateString('sv-SE') }
@@ -1113,6 +1120,8 @@ async function startCapture() {
   try {
     port = await navigator.serial.requestPort()
     await port.open({ baudRate: Number($('baudRate').value) })
+    state.followBoat = true
+    $('followBoat').textContent = 'Följer båt'
     state.live = { port, session: null, log: null, position: null, depth: null, cancelled: false }
     $('liveBadge').textContent = 'Ansluten'; $('liveBadge').className = 'badge success'
     $('startSimulator').classList.add('hidden'); $('startCapture').classList.add('hidden')
@@ -1137,7 +1146,11 @@ async function readSerialStream() {
   try {
     while (!live.cancelled) {
       const { value, done } = await reader.read()
-      if (done) { if (!live.cancelled) void stopCapture(); break }
+      if (done) {
+        if (buffer.trim()) await receiveNmea(live, buffer)
+        if (!live.cancelled) { toast('Dataströmmen avslutades. Anslut igen för att fortsätta.'); setTimeout(() => void stopCapture(), 0) }
+        break
+      }
       buffer += value
       const lines = buffer.split(/\r?\n/); buffer = lines.pop() || ''
       for (const raw of lines) {
@@ -1154,21 +1167,37 @@ async function readSerialStream() {
 async function receiveNmea(live, raw) {
   if (live.cancelled) return
   const parsed = parseNmeaSentence(raw)
-  if (parsed?.type === 'position' && Number.isFinite(parsed.speed)) live.speedAt = Date.now()
+  if (parsed?.type === 'position' && 'speed' in parsed) live.speedAt = Date.now()
   if (parsed?.type === 'position') { live.position = { ...live.position, ...parsed }; live.positionAt = Date.now() }
-  if (parsed?.type === 'gps-invalid') { live.position = null; live.positionAt = 0 }
+  if (parsed?.type === 'gps-invalid') { live.position = null; live.positionAt = 0; live.speedAt = 0 }
+  if (parsed?.type === 'depth-invalid') { live.depth = null; live.depthAt = 0 }
   if (parsed?.type === 'depth') { live.depth = parsed.depth + (Number($('liveDepthOffset').value) || 0); live.depthAt = Date.now() }
   let point = null
-  if (live.session && parsed?.type === 'position' && live.position && Number.isFinite(live.depth) && Date.now() - live.depthAt < 5000) {
-    point = { date: live.position.date || today(), time: nmeaTime(live.position.time), lat: live.position.lat, lon: live.position.lon, speed: live.position.speed || 0, depth: live.depth }
-    live.log.points.push(point)
-    if (live.log.points.length % 5 === 0) { renderLogs(); drawOverlay() }
+  if (live.session && parsed?.type === 'position' && live.position) {
+    point = { date: live.position.date || today(), time: nmeaTime(live.position.time), lat: live.position.lat, lon: live.position.lon, speed: Date.now() - live.speedAt < 5000 ? live.position.speed : null, depth: Number.isFinite(live.depth) && Date.now() - live.depthAt < 5000 ? live.depth : null }
   }
-  if (live.session) { live.write = window.sjomatning.appendLiveData({ id: live.session.id, raw, point }); await live.write }
+  if (live.session) {
+    live.write = window.sjomatning.appendLiveData({ id: live.session.id, raw, point })
+    try { await live.write } catch (error) { live.failure = error; throw error }
+  }
+  if (point) { live.log.points.push(point); renderLogs() }
+  followBoat(); drawOverlay()
   updateMapReadout()
-  $('liveReadout').innerHTML = `<span>GPS <strong>${live.position ? `${live.position.lat.toFixed(6)}, ${live.position.lon.toFixed(6)}` : 'väntar…'}</strong></span><span>Djup <strong>${Number.isFinite(live.depth) ? `${live.depth.toFixed(2)} m` : 'väntar…'}</strong></span>`
 }
 
+$('followBoat').onclick = () => { state.followBoat = true; followBoat(); $('followBoat').textContent = 'Följer båt' }
+function followBoat() {
+  const live = state.live
+  if (!state.followBoat || !live?.position || Date.now() - live.positionAt >= 5000) return
+  const pixel = geoToPixel(live.position.lat, live.position.lon)
+  if (!pixel) return
+  if (state.map) showMap(panMap(state.map, state.map.width / 2 - pixel.x, state.map.height / 2 - pixel.y))
+  else {
+    manuscriptOffset.x = viewportElement.clientWidth / 2 - pixel.x * state.scale
+    manuscriptOffset.y = viewportElement.clientHeight / 2 - pixel.y * state.scale
+    positionManuscript()
+  }
+}
 let captureStarting = false
 async function startSimulator() {
   if (state.live || captureStarting) return
@@ -1179,6 +1208,8 @@ async function startSimulator() {
     const session = await window.sjomatning.startLiveSession({ name: 'SIMULERAD-Roxen', simulated: true, timeFactor: factor })
     const log = { name: `SIMULERAD Roxen ${new Date().toLocaleTimeString('sv-SE')}`, date: today(), points: [], warnings: [], color: colors[state.logs.length % colors.length], visible: true, depthAdjustment: 0, pruneDistance: 0, waterLevel: null, correction: null }
     const live = { session, log, position: null, depth: null, cancelled: false, simulated: true }
+    state.followBoat = true
+    $('followBoat').textContent = 'Följer båt'
     state.live = live
     state.logs.push(log)
     $('liveBadge').textContent = 'Simulerar'; $('liveBadge').className = 'badge success'
@@ -1193,8 +1224,7 @@ async function startSimulator() {
       try {
         const seconds = (performance.now() - started) / 1000 * factor
         const frame = simulationFrame(seconds, epoch)
-        live.course = frame.course
-        for (const raw of frame.sentences) await receiveNmea(live, raw)
+        for (const raw of frame.sentences) if (!$('simulationGpsOnly').checked || !raw.includes('DPT')) await receiveNmea(live, raw)
         renderLogs(); drawOverlay()
         if (!live.cancelled) live.timer = setTimeout(() => { live.pending = tick() }, 1000)
       } catch (error) {
@@ -1220,9 +1250,10 @@ async function stopCapture() {
   await live.port?.close().catch(() => {})
   await finishMeasurement(live)
   $('startMeasurement').classList.add('hidden'); $('disconnectCapture').classList.add('hidden')
-  $('liveBadge').textContent = 'Frånkopplad'; $('liveBadge').className = 'badge warning'
+  $('liveBadge').textContent = live.failure ? 'Skrivfel – mätningen stoppad' : 'Frånkopplad'; $('liveBadge').className = 'badge warning'
+  updateMapReadout()
   $('simulationSpeed').disabled = false; $('startSimulator').classList.remove('hidden'); $('startCapture').classList.remove('hidden'); $('stopCapture').classList.add('hidden')
-  renderLogs(); drawOverlay(); toast(`Mätningen stoppades. ${live.log?.points.length || 0} punkter sparades i realtid.`)
+  renderLogs(); drawOverlay(); toast(live.failure ? `Skrivfel: ${live.failure.message}. Kontrollera mätmappen: ${$('livePath').textContent}` : `Mätningen stoppades. ${live.log?.points.length || 0} punkter sparades i realtid.`)
 }
 
 async function startMeasurement() {
@@ -1327,7 +1358,7 @@ function showTrackEditor(index, page = 0) {
   $('editorContent').innerHTML = `<h2>${escapeHtml(log.name)}</h2><p>${log.points.length} punkter. ${fitText(log)}. Djup korrigeras till Hydrographicas referensnivå 33,00 m RH00.</p>
     <label>Justera hela spårets djup (m)<input id="tableAdjustment" type="number" step="0.01" value="${log.depthAdjustment || 0}" ${editable ? '' : 'disabled'}></label>
     <p>${escapeHtml(depthExplanation(log))}</p><p>${editable ? 'Ändra rådjup eller koordinater direkt i tabellen. Originalfilen finns kvar och kan återställas.' : 'Pågående livespår: stoppa mätningen för att spara i biblioteket och redigera punkter.'}</p>
-    <table><thead><tr><th>Punkt / tid</th><th>Latitud</th><th>Longitud</th><th>Rådjup (m)</th><th>Justerat (m)</th><th></th></tr></thead><tbody>${log.points.slice(start, start + 100).map((point, n) => `<tr><td>${start + n + 1}<br>${escapeHtml(point.date)} ${escapeHtml(point.time)}</td>${['lat','lon','depth'].map(field => `<td><input aria-label="${field} punkt ${start + n + 1}" type="number" step="${field === 'depth' ? '0.01' : '0.000001'}" value="${field === 'depth' ? point[field] : formatCoordinate(point, field)}" data-point="${start + n}" data-field="${field}" ${editable ? '' : 'disabled'}></td>`).join('')}<td>${decimal(correctedDepth(log, point))}</td><td><button class="small-button" data-remove-point="${start + n}" ${editable ? '' : 'disabled'}>Ta bort</button></td></tr>`).join('')}</tbody></table>
+    <table><thead><tr><th>Punkt / tid</th><th>Latitud</th><th>Longitud</th><th>Rådjup (m)</th><th>Justerat (m)</th><th></th></tr></thead><tbody>${log.points.slice(start, start + 100).map((point, n) => `<tr><td>${start + n + 1}<br>${escapeHtml(point.date)} ${escapeHtml(point.time)}</td>${['lat','lon','depth'].map(field => `<td><input aria-label="${field} punkt ${start + n + 1}" type="number" step="${field === 'depth' ? '0.01' : '0.000001'}" value="${field === 'depth' ? point[field] ?? '' : formatCoordinate(point, field)}" data-point="${start + n}" data-field="${field}" ${editable ? '' : 'disabled'}></td>`).join('')}<td>${decimal(correctedDepth(log, point))}</td><td><button class="small-button" data-remove-point="${start + n}" ${editable ? '' : 'disabled'}>Ta bort</button></td></tr>`).join('')}</tbody></table>
     <button id="previousPoints" class="small-button" ${page === 0 ? 'disabled' : ''}>Föregående</button> <span>Sida ${page + 1} av ${Math.max(1, Math.ceil(log.points.length / 100))}</span> <button id="nextPoints" class="small-button" ${start + 100 >= log.points.length ? 'disabled' : ''}>Nästa</button>`
   if (!$('editorDialog').open) $('editorDialog').showModal()
   if (comparison) { $('editorContent').insertAdjacentHTML('afterbegin', '<button id="backComparison" class="small-button">Tillbaka till jämförelsen</button>'); $('backComparison').onclick = () => showComparison(true) }
@@ -1406,11 +1437,15 @@ $('reviewMeasurements').onclick=()=>{setTracksPanel(true);showComparison()}
 function updateMapReadout() {
   const live = state.live
   const depthValid = live && Number.isFinite(live.depth) && Date.now() - live.depthAt < 5000
-  const speedValid = live?.position && Number.isFinite(live.position.speed) && Date.now() - live.speedAt < 5000
+  const gpsValid = live?.position && Date.now() - live.positionAt < 5000
+  const speedValid = gpsValid && Number.isFinite(live.position.speed) && Date.now() - live.speedAt < 5000
+  const gpsText = gpsValid ? `${live.position.lat.toFixed(6)}, ${live.position.lon.toFixed(6)}` : live?.position ? 'För gammal' : 'Ogiltig / saknas'
+  const depthText = depthValid ? live.depth.toFixed(2) + ' m' : live?.depthAt ? 'För gammalt' : 'Saknas'
+  $('liveReadout').innerHTML = `<span>GPS <strong>${gpsText}</strong>${live?.positionAt ? ' · ' + Math.floor((Date.now() - live.positionAt) / 1000) + ' s' : ''}</span><span>Djup <strong>${depthText}</strong>${live?.depthAt ? ' · ' + Math.floor((Date.now() - live.depthAt) / 1000) + ' s' : ''}</span>`
   $('mapReadout').classList.toggle('hidden', !live)
-  $('mapReadout').innerHTML = `<span>Djup <strong>${depthValid ? live.depth.toFixed(2) + ' m' : '–'}</strong></span><span>Fart <strong>${speedValid ? live.position.speed.toFixed(1) + ' kn' : '–'}</strong></span>${live?.simulated ? '<small>SIMULERAD</small>' : ''}`
+  $('mapReadout').innerHTML = `<span>Djup <strong>${depthValid ? live.depth.toFixed(2) + ' m' : '–'}</strong></span><span>Fart <strong>${speedValid ? live.position.speed.toFixed(1) + ' kn' : '–'}</strong></span><span>Kurs över grund <strong>${gpsValid && Date.now() - live.speedAt < 5000 && Number.isFinite(live.position.course) ? live.position.course.toFixed(1) + '°' : '–'}</strong></span>${live?.simulated ? '<small>SIMULERAD</small>' : ''}`
 }
-setInterval(updateMapReadout, 1000)
+setInterval(() => { updateMapReadout(); if (state.live) drawOverlay() }, 1000)
 $('addLibrary').onclick = () => $('addDialog').showModal()
 $('addFiles').onclick = async () => { $('addDialog').close(); try { await addLibraryFiles(await window.sjomatning.openLibrary()) } catch(error) { toast(error.message) } }
 $('addFolder').onclick = () => { $('addDialog').close(); openFolder() }

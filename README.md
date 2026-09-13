@@ -20,7 +20,7 @@ Anslut en NMEA 0183-enhet via USB (eller en USB–seriell-adapter) och använd p
 4. Klicka på **Starta mätning**. **Stoppa och spara spåret** avslutar mätningen men behåller anslutningen. Du kan starta ett nytt spår direkt.
 5. Klicka på **Koppla från** för att stänga USB-anslutningen och spara eventuell pågående mätning.
 
-Appen stöder GPS-meningarna GGA/RMC och ekolodsmeningarna DPT/DBT. Under körningen skrivs varje mottagen NMEA-mening omedelbart till `raw.nmea`, medan kompletta GPS- och djupmätningar skrivs till `track.csv`. Filerna ligger i den sökväg som visas i livepanelen. Råströmmen ändras aldrig.
+Appen stöder GPS-meningarna GGA/RMC och ekolodsmeningarna DPT/DBT. Under körningen skrivs varje mottagen NMEA-mening omedelbart till `raw.nmea`, medan GPS-punkter skrivs till `track.csv`, med djup när ett giltigt djup yngre än fem sekunder finns. Filerna ligger i den sökväg som visas i livepanelen. Råströmmen ändras aldrig.
 
 Det aktiva spåret syns direkt på kartan och kan exporteras som CSV eller SeaClear waypoint-TXT. För att rätta en felaktig punkt klickar du på spåret i kartan eller väljer **Info och punkttabell**. Där kan rådjup och koordinater ändras eller punkten tas bort. Stoppa en pågående mätning först; spåret läggs då i biblioteket. Vattennivå och generell djupjustering kan fortfarande anges per spår utan att råfilen skrivs om.
 
@@ -149,11 +149,11 @@ Etapperna är föreslagen arbetsordning, inte tidslöften. Varje etapp avslutas 
 
 #### Etapp 1 – Tillförlitlig GPS och grundnavigation
 
-- [ ] Separera GPS-navigation och spårloggning från kravet på ekolodsdjup. Visa båtsymbol, position, fart och kurs över grund direkt från GPS.
-- [ ] Inför följ-båt-läge med möjlighet att panorera manuellt och återgå till följning.
-- [ ] Inför separata tidsstämplar och status för GPS och djup; markera ogiltig eller gammal data. Nu kan ett tidigare djup återanvändas utan ålderskontroll, och ogiltig GPS nollställer inte den sparade positionen.
-- [ ] Hantera bortkoppling, återanslutning och normal avslutning av dataströmmen. Testa skrivfel och återställning efter avbruten session.
-- [ ] Verifiera att sparade spår kan läsas tillbaka utan förlust av position, tid, fart och djup. Kontrollera även appens egen semikolonavgränsade CSV-export mot importen som nu delar på komma.
+- [x] Separera GPS-navigation och spårloggning från kravet på ekolodsdjup. Visa båtsymbol, position, fart och kurs över grund direkt från GPS.
+- [x] Inför följ-båt-läge med möjlighet att panorera manuellt och återgå till följning.
+- [x] Inför separata tidsstämplar och status för GPS och djup; markera ogiltig eller gammal data. Nu kan ett tidigare djup återanvändas utan ålderskontroll, och ogiltig GPS nollställer inte den sparade positionen.
+- [x] Hantera bortkoppling, återanslutning och normal avslutning av dataströmmen. Testa skrivfel och återställning efter avbruten session.
+- [x] Verifiera att sparade spår kan läsas tillbaka utan förlust av position, tid, fart och djup. Kontrollera även appens egen semikolonavgränsade CSV-export mot importen som nu delar på komma.
 
 **Klart när:** en inspelad GPS-ström utan ekolod visar båten, flyttar kartan och sparar ett återöppningsbart spår. Avbrott och föråldrade värden syns tydligt och ger inte nya till synes giltiga mätningar.
 
@@ -323,3 +323,14 @@ Förslagen ovan bevaras som underlag från användarutvärderingen. Ändringarna
 - En introduktion **Hitta område → Välj spår → Jämför → Granska avvikelser** ger en direkt ingång till jämförelsen och förklarar att GPS och fältmanus inte krävs.
 
 `npm run test:feedback-ui` använder syntetiska spår med punkter både inom och utanför Roxen för att verifiera omfattning, filvarianter, val av två spår och radievalidering. `npm run test:library-ui` täcker även matchningskartan och återgång från punktgranskning. De kör med isolerat bibliotek. Det observerade teckenfelet i Lindöfilnamnet har ingen fastställd källa och ändras därför inte automatiskt. Ett komplett manuellt import–jämförelse–export-prov återstår som uppföljning.
+
+
+### Etapp 1 genomförd – GPS och grundnavigation
+
+GPS visar båt, position, fart och kurs över grund även utan ekolod och utan aktiv mätning. Utan giltig kurs visas en rund positionssymbol. **Följ båt** centrerar kartan; panorering pausar följningen och knappen återupptar den. GPS och djup visar var sin ålder. Efter fem sekunder markeras värdet som gammalt; ogiltig GPS tar bort båtsymbolen. GPS-spår sparas med tomma fält för saknat djup eller fart, aldrig med påhittade nollvärden.
+
+Vid avslutad eller avbruten USB-ström stängs anslutningen och spåret sparas. Använd **Anslut** igen för återanslutning och starta sedan en ny mätning. Skrivfel stoppar insamlingen med felmeddelande. Vid nästa appstart återförs avslutade CSV-rader från oavslutade sessioner till biblioteket; en ofullständig sista rad hoppas över och originalfilerna behålls. Tomma sessioner skapar inget biblioteksspår.
+
+CSV-export kan läsas tillbaka, inklusive citerade spårnamn, decimalsekunder, full precision för position/fart/rådjup och saknade värden. Vid import används rådjupskolumnen; justerad djupkolumn ersätter inte rådjupet. CSV är formatet för GPS-spår utan djup; waypoint-TXT-exporten tar endast med punkter som har djup.
+
+Prova **Simulerad båttur → Endast GPS (utan ekolod)**. `npm test` inkluderar simulerade tidssteg, gammalt djup, ogiltig GPS, skrivfel, uppdelade seriella meddelanden, normalt strömslut, USB-avbrott och återställning efter avbruten skrivning. `npm run test:navigation-ui` kör den riktiga Electron-renderaren med simulerad GPS, kartföljning, panorering, återgång till följning, stopp och CSV-återläsning. Även `test:feedback-ui` och `test:library-ui` har körts. Fysisk instrumentkompatibilitet och strömavbrott på verklig hårdvara är inte verifierade av dessa tester.

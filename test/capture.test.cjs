@@ -11,7 +11,7 @@ test('USB connection stays open across separate measurement sessions', async () 
   let opened=0, closed=0, sessions=0, stopped=0
   const writes=[]
   const context = vm.createContext({ $, console, Date, Number, String, setTimeout, clearTimeout,
-    state:{logs:[],live:null}, colors:['red'], toast(){}, renderLogs(){},drawOverlay(){},updateMapReadout(){},
+    state:{logs:[],live:null}, colors:['red'], toast(){}, renderLogs(){},drawOverlay(){},updateMapReadout(){}, geoToPixel(){return null},
     navigator:{serial:{requestPort:async()=>({open:async()=>opened++,close:async()=>closed++})}},
     parseNmeaSentence:raw=>raw==='depth'?{type:'depth',depth:2}:{type:'position',lat:58,lon:15,speed:1},
     window:{sjomatning:{startLiveSession:async()=>({id:++sessions,folder:'test'}),appendLiveData:async data=>writes.push(data),stopLiveSession:async()=>{stopped++;return null}}}
@@ -34,4 +34,13 @@ test('USB connection stays open across separate measurement sessions', async () 
   assert.equal(sessions,2);assert.equal(writes[1].id,2)
   await run('stopCapture()')
   assert.equal(stopped,2);assert.equal(closed,1);assert.equal(run('state.live'),null)
+  await run('startCapture()')
+  assert.equal(opened,2)
+  assert.equal(run('state.live.position'),null)
+  assert.equal(run('state.live.depth'),null)
+  await run('startMeasurement()')
+  await run("receiveNmea(state.live,'position')")
+  assert.equal(writes.at(-1).point.depth,null)
+  await run('stopCapture()')
+  assert.equal(closed,2)
 })

@@ -28,10 +28,10 @@ export function prunePoints(points, minimumDistance = 25) {
     const point = points[index]
     const lastKept = kept[kept.length - 1]
     if (distanceMeters(lastKept, point) < distance && index < points.length - 1) {
-      if (!shallowest || point.depth < shallowest.depth) shallowest = point
+      if (Number.isFinite(point.depth) && (!shallowest || point.depth < shallowest.depth)) shallowest = point
       continue
     }
-    if (shallowest && shallowest.depth < lastKept.depth - .001 && shallowest.depth < point.depth - .001) kept.push(shallowest)
+    if (shallowest && Number.isFinite(lastKept.depth) && Number.isFinite(point.depth) && shallowest.depth < lastKept.depth - .001 && shallowest.depth < point.depth - .001) kept.push(shallowest)
     kept.push(point)
     shallowest = null
   }
@@ -43,6 +43,7 @@ export function processedPoints(track) {
 }
 
 export function adjustedDepth(track, point) {
+  if (!Number.isFinite(point.depth)) return NaN
   const correction = Number.isFinite(track.correction) ? track.correction : 0
   const adjustment = Number.isFinite(track.depthAdjustment) ? track.depthAdjustment : 0
   return point.depth - correction + adjustment
@@ -64,7 +65,7 @@ export function exportCsv(tracks) {
     for (const point of processedPoints(track)) {
       rows.push([
         csvCell(track.name), point.date, point.time, formatCoordinate(point, 'lat'), formatCoordinate(point, 'lon'),
-        point.speed.toFixed(1), point.depth.toFixed(2), adjustedDepth(track, point).toFixed(2)
+        point.speed ?? '', point.depth ?? '', Number.isFinite(point.depth) ? adjustedDepth(track, point).toFixed(2) : ''
       ].join(';'))
     }
   }
@@ -76,6 +77,7 @@ export function exportWaypoints(tracks) {
   tracks.forEach((track, trackIndex) => {
     const prefix = String.fromCharCode(65 + (trackIndex % 26))
     processedPoints(track).forEach((point, pointIndex) => {
+      if (!Number.isFinite(point.depth)) return
       const id = `${prefix}${String(pointIndex + 1).padStart(4, '0')}`
       rows.push(`WP,D,${id} ${adjustedDepth(track, point).toFixed(2)},${formatCoordinate(point, 'lat')},${formatCoordinate(point, 'lon')},,,Ekolod:${point.depth.toFixed(2)}`)
     })
@@ -93,12 +95,14 @@ export function compareTrackPoints(reference, track, radius = 10) {
   }
   const grid = new Map()
   reference.points.forEach((point, index) => {
+    if (!Number.isFinite(point.depth)) return
     const key = cell(point).join(',')
     if (!grid.has(key)) grid.set(key, [])
     grid.get(key).push({ point, index })
   })
   const pairs = []
   track.points.forEach((point, index) => {
+    if (!Number.isFinite(point.depth)) return
     const [x,y,z] = cell(point)
     let nearest = null
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {

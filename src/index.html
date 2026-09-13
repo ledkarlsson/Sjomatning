@@ -107,6 +107,7 @@
             <label>Givarjustering (m)<input id="liveDepthOffset" type="number" step="0.01" value="0.00"></label>
           </div>
           </details>
+          <button id="followBoat" type="button">Följ båt</button>
           <div id="liveReadout" class="live-readout"><span>GPS <strong>–</strong></span><span>Djup <strong>–</strong></span></div>
           <button id="startCapture" class="button wide">Anslut</button>
           <button id="startMeasurement" class="button wide hidden">Starta mätning</button>
@@ -117,6 +118,7 @@
 
         <details class="panel" id="simulatorPanel">
           <summary>Simulerad båttur</summary>
+          <label><input id="simulationGpsOnly" type="checkbox"> Endast GPS (utan ekolod)</label>
           <label>Simulatorns tidsfaktor<select id="simulationSpeed"><option value="1">1× – verklig tid</option><option value="10" selected>10× – snabbare båttur</option><option value="60">60× – snabb överblick</option></select></label>
           <button id="startSimulator" class="button wide secondary">Starta simulerad båttur på Roxen</button>
         </details>

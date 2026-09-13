@@ -3,7 +3,7 @@
 export function buildPointIndex(points) {
   function build(indices, depth=0) {
     let west=Infinity,east=-Infinity,south=Infinity,north=-Infinity,min=Infinity,max=-Infinity,sample=indices[0]
-    for(const i of indices) { const p=points[i]; west=Math.min(west,p.lon);east=Math.max(east,p.lon);south=Math.min(south,p.lat);north=Math.max(north,p.lat);if(p.depth<min){min=p.depth;sample=i}max=Math.max(max,p.depth) }
+    for(const i of indices) { const p=points[i]; west=Math.min(west,p.lon);east=Math.max(east,p.lon);south=Math.min(south,p.lat);north=Math.max(north,p.lat);if(Number.isFinite(p.depth)&&p.depth<min){min=p.depth;sample=i}if(Number.isFinite(p.depth))max=Math.max(max,p.depth) }
     const node={west,east,south,north,min,max,sample,count:indices.length}
     if(indices.length<=64 || depth>=24 || (west===east && south===north)) { node.indices=indices;return node }
     const mx=(west+east)/2,my=(south+north)/2,groups=[[],[],[],[]]
@@ -30,7 +30,7 @@ export function viewPoints(index,bounds,longitudeStep,latitudeStep) {
     if(n.east-n.west<=longitudeStep && n.north-n.south<=latitudeStep && contained(n,bounds)) { result.push(n.sample);return }
     if(n.children) {for(const c of n.children)visit(c);return}
     const cells=new Map()
-    for(const i of n.indices){const p=index.points[i];if(p.lon<bounds.west||p.lon>bounds.east||p.lat<bounds.south||p.lat>bounds.north)continue;const key=Math.floor(p.lon/longitudeStep)+':'+Math.floor(p.lat/latitudeStep);const old=cells.get(key);if(old===undefined||p.depth<index.points[old].depth)cells.set(key,i)}
+    for(const i of n.indices){const p=index.points[i];if(p.lon<bounds.west||p.lon>bounds.east||p.lat<bounds.south||p.lat>bounds.north)continue;const key=Math.floor(p.lon/longitudeStep)+':'+Math.floor(p.lat/latitudeStep);const old=cells.get(key);if(old===undefined||(Number.isFinite(p.depth)&&(!Number.isFinite(index.points[old].depth)||p.depth<index.points[old].depth)))cells.set(key,i)}
     result.push(...cells.values())
   }
   visit(index.root)
