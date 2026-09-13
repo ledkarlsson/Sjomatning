@@ -196,12 +196,8 @@ async function loadRoxenMap(bounds = ROXEN_BOUNDS, zoom = 11) {
   const context = pdfCanvas.getContext('2d')
   context.fillStyle = '#dce8e5'
   context.fillRect(0, 0, state.width, state.height)
-  $('documentName').textContent = 'Roxen · kostnadsfri översiktskarta'
-  $('pageInfo').textContent = 'Översiktskarta · ej för navigation'
-  $('geoBadge').textContent = 'Automatisk GPS-karta'
-  $('geoBadge').className = 'badge success'
   $('introPanel').classList.add('hidden')
-  $('documentPanel').classList.remove('hidden')
+  $('documentPanel').classList.add('hidden')
   $('calibrationPanel').classList.add('hidden')
   $('emptyState').classList.add('hidden')
   $('mapAttribution').classList.remove('hidden')
@@ -597,9 +593,8 @@ async function exportVisibleTracks(format) {
   if (path) toast(`Exporterade ${tracks.length} spår.`)
 }
 
-async function loadWaterLevel() {
-  const date = $('waterLevelDate').value
-  if (!date) return toast('Välj först en dag.')
+async function loadWaterLevel(latest = false) {
+  const date = latest === true ? null : $('waterLevelDate').value
   $('fetchWaterLevel').disabled = true
   $('fetchWaterLevel').textContent = 'Hämtar…'
   $('waterLevelStatus').textContent = 'Kontaktar Tekniska verken…'
@@ -612,7 +607,8 @@ async function loadWaterLevel() {
       return
     }
     state.roxenLevel = result.data
-    const formattedDate = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'long' }).format(new Date(`${date}T12:00:00`))
+    $('waterLevelDate').value = result.data.date
+    const formattedDate = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'long' }).format(new Date(`${result.data.date}T12:00:00`))
     $('waterLevelStatus').innerHTML = `<strong>${result.data.level.toFixed(2)} m ö.h.</strong><span>${formattedDate} · RH00</span>`
     $('applyWaterLevel').classList.toggle('hidden', state.logs.length === 0)
   } catch (error) {
@@ -820,7 +816,7 @@ window.sjomatning.launchPdf().then(file => {
   if (file) loadPdfFile(file)
 })
 
-$('waterLevelDate').value = new Date().toLocaleDateString('sv-SE')
+void loadWaterLevel(true)
 
 window.sjomatning.listLibrary().then(files => addLibraryFiles(files, [], true)).catch(error => toast(`Kunde inte läsa biblioteket: ${error.message}`))
 

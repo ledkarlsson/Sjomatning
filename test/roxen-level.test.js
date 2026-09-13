@@ -24,3 +24,32 @@ test('skickar vecka och år till Roxens dataendpoint', async () => {
   assert.equal(request.options.body.get('lake'), 'roxen')
   assert.equal(request.options.body.get('week'), '36')
 })
+const { fetchLatestRoxenLevel } = require('../src/roxen-level')
+
+function chartResponse(data) {
+  return { ok: true, text: async () => JSON.stringify({ datasets: [{ label: 'Vattennivå', data }] }) }
+}
+
+test('senaste nivå hoppar över luckor och framtida dagar', async () => {
+  const result = await fetchLatestRoxenLevel(async () => chartResponse([32.5, null, '', 32.8]), '2026-09-02')
+  assert.equal(result.date, '2026-08-31')
+  assert.equal(result.level, 32.5)
+})
+
+test('senaste nivå söker föregående vecka över årsskifte', async () => {
+  const requests = []
+  const result = await fetchLatestRoxenLevel(async (_url, options) => {
+    requests.push([options.body.get('year'), options.body.get('week')])
+    return chartResponse(requests.length === 1 ? [] : [null, null, null, null, null, null, 32.7])
+  }, '2024-12-30')
+  assert.deepEqual(requests, [['2025', '1'], ['2024', '52']])
+  assert.equal(result.date, '2024-12-29')
+  assert.equal(result.level, 32.7)
+})
+
+test('senaste nivå avslutar om källan saknar aktuella värden', async () => {
+  let requests = 0
+  const result = await fetchLatestRoxenLevel(async () => { requests += 1; return chartResponse([]) }, '2026-09-02')
+  assert.equal(result, null)
+  assert.equal(requests, 8)
+})

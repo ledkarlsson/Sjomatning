@@ -159,3 +159,14 @@ canvas { position: absolute; inset: 0; display: block; }
   .layout { grid-template-columns: 310px minmax(0, 1fr); }
   .depth-legend { display: none; }
 }
+
+/* Compact panel help is available with both mouse and keyboard. */
+.panel { position: relative; }
+.panel-heading { padding-right: 24px; }
+.panel-help { position: absolute; top: 12px; right: 10px; z-index: 4; }
+.help-button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--paper); color: var(--green); font-size: 13px; font-weight: 800; }
+.help-button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.help-text { display: none; position: absolute; top: 100%; right: 0; width: 245px; padding: 10px 12px; border-radius: 8px; background: var(--ink); color: white; font-size: 12px; line-height: 1.5; font-weight: 400; box-shadow: 0 4px 14px #0003; }
+.panel-help:hover, .panel-help:focus-within { z-index: 6; }
+.panel-help:hover .help-text, .panel-help:focus-within .help-text { display: block; }
+#documentName { padding-right: 24px; overflow-wrap: anywhere; }

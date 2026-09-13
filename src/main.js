@@ -3,7 +3,7 @@ const fs = require('node:fs/promises')
 const crypto = require('node:crypto')
 const { app, BrowserWindow, dialog, ipcMain, Menu, session } = require('electron')
 const { autoUpdater } = require('electron-updater')
-const { fetchRoxenLevel } = require('./roxen-level')
+const { fetchRoxenLevel, fetchLatestRoxenLevel } = require('./roxen-level')
 const { createLibraryStore } = require('./library-store')
 const packageMetadata = require('../package.json')
 let libraryStore
@@ -140,8 +140,8 @@ ipcMain.handle('files:launch-pdf', async () => {
 
 ipcMain.handle('roxen:water-level', async (_event, date) => {
   try {
-    const result = await fetchRoxenLevel(date)
-    return result ? { ok: true, data: result } : { ok: false, message: 'Det finns inget publicerat vattenstånd för den valda dagen.' }
+    const result = date ? await fetchRoxenLevel(date) : await fetchLatestRoxenLevel()
+    return result ? { ok: true, data: result } : { ok: false, message: date ? 'Det finns inget publicerat vattenstånd för den valda dagen.' : 'Inget publicerat vattenstånd hittades under de senaste åtta veckorna.' }
   } catch (error) {
     console.error('Vattenståndet kunde inte hämtas', error)
     return { ok: false, message: `Vattenståndet kunde inte hämtas: ${error.message}` }

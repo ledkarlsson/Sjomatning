@@ -28,7 +28,7 @@ function parseChartData(chartData, dateString) {
   }
 }
 
-async function fetchRoxenLevel(dateString, fetchImpl = fetch) {
+async function fetchChart(dateString, fetchImpl) {
   const { year, week } = isoWeek(dateString)
   const body = new URLSearchParams({ lake: 'roxen', resolution: 'day', year: String(year), week: String(week) })
   const response = await fetchImpl(ROXEN_ENDPOINT, {
@@ -38,8 +38,28 @@ async function fetchRoxenLevel(dateString, fetchImpl = fetch) {
     signal: AbortSignal.timeout(15000)
   })
   if (!response.ok) throw new Error(`Datakällan svarade med HTTP ${response.status}.`)
-  const chartData = JSON.parse(await response.text())
-  return parseChartData(chartData, dateString)
+  return JSON.parse(await response.text())
 }
 
-module.exports = { ROXEN_ENDPOINT, fetchRoxenLevel, isoWeek, parseChartData }
+async function fetchRoxenLevel(dateString, fetchImpl = fetch) {
+  return parseChartData(await fetchChart(dateString, fetchImpl), dateString)
+}
+
+async function fetchLatestRoxenLevel(fetchImpl = fetch, dateString = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' })) {
+  isoWeek(dateString)
+  const day = new Date(`${dateString}T12:00:00Z`)
+  // Search recent weekly charts without requesting the same week for each day.
+  for (let weeks = 0; weeks < 8; weeks += 1) {
+    const date = day.toISOString().slice(0, 10)
+    const chart = await fetchChart(date, fetchImpl)
+    const { weekday } = isoWeek(date)
+    for (let index = weekday; index > 0; index -= 1) {
+      const result = parseChartData(chart, day.toISOString().slice(0, 10))
+      if (result) return result
+      day.setUTCDate(day.getUTCDate() - 1)
+    }
+  }
+  return null
+}
+
+module.exports = { ROXEN_ENDPOINT, fetchRoxenLevel, fetchLatestRoxenLevel, isoWeek, parseChartData }
