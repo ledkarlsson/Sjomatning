@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('sjomatning', {
   getRoxenWaterLevel: date => ipcRenderer.invoke('roxen:water-level', date),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   exportTracks: options => ipcRenderer.invoke('tracks:export', options),
+  startLiveSession: metadata => ipcRenderer.invoke('live:start', metadata),
+  appendLiveData: data => ipcRenderer.invoke('live:append', data),
+  stopLiveSession: id => ipcRenderer.invoke('live:stop', id),
   onUpdaterStatus: callback => ipcRenderer.on('updater:status', (_event, status) => callback(status)),
   installUpdate: () => ipcRenderer.invoke('updater:install')
 })

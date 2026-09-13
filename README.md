@@ -212,3 +212,9 @@ Funktionsmålet gäller SeaClear II enligt den lokala jämförelsefilen, inte st
 NMEA över nätverk, NMEA 2000, Signal K, WCI-import, avancerade AIS-kollisionslarm och fler sjöars vattenstånd kan vara värdefulla, men är inte uttryckliga krav i `seaclear2.txt`. De ska planeras separat. WCI nämns i de äldre anteckningarna och kan prioriteras om befintliga fältmanus kräver det.
 
 För sjömätningen bör även båt, operatör, instrument, antenn-/givaravstånd och vattennivåreferens sparas som sessionsmetadata. Precisera också råloggsgarantin: i dag sparas mottagna textrader med normaliserade radslut och en tillagd metadataheader; byteexakt råinsamling kräver en separat ändring. Detta är kvalitetsförbättringar utöver SeaClear-jämförelsen.
+
+### Simulerad båttur utan USB
+
+Klicka på **Starta simulerad båttur på Roxen** i livepanelen. Simulatorn öppnar en karta över Roxen och kör en fiktiv båt i en slinga med 5 knops fart och varierande djup. Välj 1×, 10× eller 60× före start; 10× är standard. En pil visar båtens position och riktning. Kartbakgrunden kräver internet.
+
+Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) varje sekund genom samma parser och loggning som USB-mätning. Tidsfaktorn accelererar både rörelsen och NMEA-klockan. Klicka **Stoppa och spara spåret** när du är klar. Spåret och mätmappen märks SIMULERAD; råloggen innehåller också `simulated: true`. Djupen är påhittade. Detta är en intern simulator och skapar ingen COM-port för andra program.

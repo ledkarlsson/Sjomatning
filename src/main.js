@@ -1,12 +1,13 @@
 const path = require('node:path')
 const fs = require('node:fs/promises')
 const crypto = require('node:crypto')
-const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, session } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel } = require('./roxen-level')
 const { createLibraryStore } = require('./library-store')
 const packageMetadata = require('../package.json')
 let libraryStore
+const liveSessions = new Map()
 
 // Chromium-cachen hålls åtskild från appens beständiga data. Det undviker
 // låsta Cache/GPUCache-mappar vid uppdatering och snabb omstart på Windows.
@@ -162,9 +163,43 @@ ipcMain.handle('tracks:export', async (_event, { suggestedName, content, format 
   return result.filePath
 })
 
+ipcMain.handle('live:start', async (_event, metadata = {}) => {
+  const started = new Date()
+  const id = crypto.randomUUID()
+  const safeName = String(metadata.name || 'matning').replace(/[^a-zA-Z0-9åäöÅÄÖ_-]+/g, '-').slice(0, 50)
+  const folder = path.join(app.getPath('userData'), 'measurements', `${started.toISOString().replace(/[:.]/g, '-')}_${safeName}`)
+  await fs.mkdir(folder, { recursive: true })
+  const rawPath = path.join(folder, 'raw.nmea')
+  const csvPath = path.join(folder, 'track.csv')
+  await fs.writeFile(rawPath, `# ${JSON.stringify({ ...metadata, started: started.toISOString() })}\r\n`, 'utf8')
+  await fs.writeFile(csvPath, 'Datum,Tid,Latitud,Longitud,Fart,Djup\r\n', 'utf8')
+  liveSessions.set(id, { rawPath, csvPath })
+  return { id, folder }
+})
+
+ipcMain.handle('live:append', async (_event, { id, raw, point }) => {
+  const target = liveSessions.get(id)
+  if (!target) throw new Error('Mätsessionen är inte aktiv.')
+  if (raw) await fs.appendFile(target.rawPath, `${String(raw).replace(/[\r\n]+/g, '')}\r\n`, 'utf8')
+  if (point) {
+    const values = [point.date, point.time, point.lat, point.lon, point.speed, point.depth]
+    if (values.slice(2).every(Number.isFinite)) await fs.appendFile(target.csvPath, `${values.join(',')}\r\n`, 'utf8')
+  }
+  return true
+})
+
+ipcMain.handle('live:stop', (_event, id) => liveSessions.delete(id))
+
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
   libraryStore = createLibraryStore(path.join(app.getPath('userData'), 'survey-library'))
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => permission === 'serial')
+  session.defaultSession.setDevicePermissionHandler(details => details.deviceType === 'serial')
+  session.defaultSession.on('select-serial-port', (event, portList, _webContents, callback) => {
+    event.preventDefault()
+    const labels = portList.map((port, index) => `${index + 1}. ${port.displayName || port.portName || 'USB-enhet'} (${port.vendorId || '?'}:${port.productId || '?'})`)
+    dialog.showMessageBox({ type: 'question', title: 'Välj GPS/ekolod', message: 'Välj seriell USB-enhet', buttons: [...labels, 'Avbryt'], cancelId: labels.length }).then(({ response }) => callback(portList[response]?.portId || ''))
+  })
   Menu.setApplicationMenu(null)
   createWindow()
 

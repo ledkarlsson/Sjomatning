@@ -13,7 +13,7 @@
     "package": "electron-builder --dir",
     "make": "electron-builder --win nsis --publish never",
     "test": "node --test",
-    "lint": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/track-parser.mjs && node --check src/track-processing.mjs && node --check src/web-map.mjs && node --check src/roxen-level.js && node --check src/library-store.js"
+    "lint": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/nmea-parser.mjs && node --check src/track-parser.mjs && node --check src/track-processing.mjs && node --check src/web-map.mjs && node --check src/roxen-level.js && node --check src/library-store.js"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",

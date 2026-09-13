@@ -2,11 +2,13 @@ import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
 import { createWebMap, geoToMapPixel, mapPixelToGeo, tilesForMap } from './web-map.mjs'
 import { adjustedDepth, exportCsv, exportWaypoints, processedPoints, trackDate } from './track-processing.mjs'
+import { simulationFrame } from './nmea-simulator.mjs'
+import { parseNmeaSentence } from './nmea-parser.mjs'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
 const colors = ['#e14b3b', '#087f8c', '#7855a6', '#d58416', '#2e6db4']
-const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, map: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
+const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, map: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, editLogIndex: null, live: null, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
 const $ = id => document.getElementById(id)
 const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
@@ -176,8 +178,8 @@ function loadTile(url) {
   })
 }
 
-async function loadRoxenMap() {
-  const map = createWebMap()
+async function loadRoxenMap(bounds, zoom) {
+  const map = createWebMap(bounds, zoom)
   state.pdf = null
   state.pdfKey = null
   state.activePdfId = null
@@ -459,6 +461,16 @@ function drawOverlay() {
       context.fillStyle = depthColor(correctedDepth(log, point), min, max); context.fill()
     })
   })
+  if (state.live?.simulated && state.live.position) {
+    const pixel = geoToPixel(state.live.position.lat, state.live.position.lon)
+    if (pixel) {
+      context.save(); context.translate(pixel.x, pixel.y); context.rotate((state.live.course || 0) * Math.PI / 180)
+      const size = 12 / state.scale
+      context.beginPath(); context.moveTo(0, -size); context.lineTo(size * .65, size); context.lineTo(0, size * .55); context.lineTo(-size * .65, size); context.closePath()
+      context.fillStyle = '#087f8c'; context.fill(); context.strokeStyle = '#fff'; context.lineWidth = 2 / state.scale; context.stroke(); context.restore()
+    }
+  }
+
 }
 
 function correctedDepth(log, point) {
@@ -537,6 +549,7 @@ function renderLogs() {
         <label>Djupjustering (m)<input type="number" step="0.01" data-depth-adjustment="${index}" value="${(log.depthAdjustment || 0).toFixed(2)}"></label>
         <label>Glesa, avstånd (m)<input type="number" min="0" max="500" step="1" data-prune-distance="${index}" value="${log.pruneDistance || 0}"></label>
       </div>
+      <button class="small-button edit-track" data-edit-log="${index}">${state.editLogIndex === index ? 'Avsluta redigering' : 'Redigera punkter i kartan'}</button>
     </div>`
   }).join('')
   document.querySelectorAll('[data-log]').forEach(input => input.addEventListener('change', event => {
@@ -560,6 +573,12 @@ function renderLogs() {
     const log = state.logs[Number(event.target.dataset.pruneDistance)]
     log.pruneDistance = Math.max(0, Number(event.target.value) || 0)
     renderLogs(); drawOverlay()
+  }))
+  document.querySelectorAll('[data-edit-log]').forEach(button => button.addEventListener('click', event => {
+    const index = Number(event.target.dataset.editLog)
+    state.editLogIndex = state.editLogIndex === index ? null : index
+    renderLogs()
+    toast(state.editLogIndex == null ? 'Punktredigeringen avslutades.' : 'Klicka på en punkt i kartan för att ändra djup eller ta bort den.')
   }))
 }
 
@@ -621,6 +640,27 @@ function canvasPoint(event) {
 }
 
 overlay.addEventListener('click', event => {
+  if (!state.armed && state.editLogIndex != null) {
+    const log = state.logs[state.editLogIndex]
+    const clicked = canvasPoint(event)
+    let nearest = null
+    log.points.forEach((point, index) => {
+      const pixel = geoToPixel(point.lat, point.lon)
+      const distance = pixel ? Math.hypot(pixel.x - clicked.x, pixel.y - clicked.y) * state.scale : Infinity
+      if (!nearest || distance < nearest.distance) nearest = { point, index, distance }
+    })
+    if (!nearest || nearest.distance > 16) return toast('Ingen punkt tillräckligt nära. Zooma in och försök igen.')
+    const answer = window.prompt(`Rådjup är ${nearest.point.depth.toFixed(2)} m. Ange nytt rådjup, eller skriv RADERA för att ta bort punkten.`, nearest.point.depth.toFixed(2))
+    if (answer == null) return
+    if (answer.trim().toLowerCase() === 'radera') log.points.splice(nearest.index, 1)
+    else {
+      const depth = Number(answer.replace(',', '.'))
+      if (!Number.isFinite(depth) || depth < 0) return toast('Djupet måste vara ett positivt tal.')
+      nearest.point.depth = depth
+    }
+    renderLogs(); drawOverlay(); toast('Spåret ändrades. Exporten använder den redigerade versionen.')
+    return
+  }
   if (!state.armed) return
   const lat = Number($('calLat').value)
   const lon = Number($('calLon').value)
@@ -671,7 +711,7 @@ $('clearCalibration').addEventListener('click', () => {
   updateGeoStatus(); drawOverlay()
 })
 $('openPdf').addEventListener('click', openPdf)
-$('openRoxenMap').addEventListener('click', loadRoxenMap)
+$('openRoxenMap').addEventListener('click', () => loadRoxenMap())
 $('openFolder').addEventListener('click', openFolder)
 $('emptyOpenPdf').addEventListener('click', openPdf)
 $('openLogs').addEventListener('click', openLogs)
@@ -814,3 +854,126 @@ window.sjomatning.onUpdaterStatus(({ status, detail }) => {
   }
 })
 $('installUpdate').addEventListener('click', () => window.sjomatning.installUpdate())
+
+function nmeaTime(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  return digits.length >= 6 ? `${digits.slice(0, 2)}:${digits.slice(2, 4)}:${digits.slice(4, 6)}` : new Date().toLocaleTimeString('sv-SE')
+}
+
+function today() { return new Date().toLocaleDateString('sv-SE') }
+
+async function startCapture() {
+  if (state.live || captureStarting) return
+  if (!navigator.serial) return toast('Seriell USB stöds inte i den här programversionen.')
+  captureStarting = true
+  $('startSimulator').disabled = $('startCapture').disabled = true
+  let port
+  try {
+    port = await navigator.serial.requestPort()
+    await port.open({ baudRate: Number($('baudRate').value) })
+    const session = await window.sjomatning.startLiveSession({ baudRate: Number($('baudRate').value), depthOffset: Number($('liveDepthOffset').value) || 0 })
+    const log = { name: `Live ${new Date().toLocaleString('sv-SE')}`, date: today(), points: [], warnings: [], color: colors[state.logs.length % colors.length], visible: true, depthAdjustment: 0, pruneDistance: 0, waterLevel: null, correction: null }
+    state.logs.push(log)
+    state.live = { port, session, log, position: null, depth: null, cancelled: false }
+    $('liveBadge').textContent = 'Loggar'; $('liveBadge').className = 'badge success'
+    $('startSimulator').classList.add('hidden'); $('startCapture').classList.add('hidden'); $('stopCapture').classList.remove('hidden')
+    $('livePath').textContent = `Sparas i ${session.folder}`
+    renderLogs()
+    readSerialStream().catch(error => { console.error(error); toast(`USB-anslutningen avbröts: ${error.message}`); stopCapture() })
+  } catch (error) {
+    if (port?.readable || port?.writable) await port.close().catch(() => {})
+    if (error.name !== 'NotFoundError') toast(`Kunde inte starta mätningen: ${error.message}`)
+  } finally { captureStarting = false; $('startSimulator').disabled = $('startCapture').disabled = false }
+}
+
+async function readSerialStream() {
+  const live = state.live
+  const decoder = new TextDecoderStream()
+  const closed = live.port.readable.pipeTo(decoder.writable).catch(() => {})
+  const reader = decoder.readable.getReader()
+  live.reader = reader
+  let buffer = ''
+  while (!live.cancelled) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += value
+    const lines = buffer.split(/\r?\n/); buffer = lines.pop() || ''
+    for (const raw of lines) {
+      await receiveNmea(live, raw)
+    }
+  }
+  reader.releaseLock()
+  await closed
+}
+
+async function receiveNmea(live, raw) {
+  if (live.cancelled) return
+  const parsed = parseNmeaSentence(raw)
+  if (parsed?.type === 'position') live.position = { ...live.position, ...parsed }
+  if (parsed?.type === 'depth') live.depth = parsed.depth + (Number($('liveDepthOffset').value) || 0)
+  let point = null
+  if (parsed?.type === 'position' && live.position && Number.isFinite(live.depth)) {
+    point = { date: live.position.date || today(), time: nmeaTime(live.position.time), lat: live.position.lat, lon: live.position.lon, speed: live.position.speed || 0, depth: live.depth }
+    live.log.points.push(point)
+    if (live.log.points.length % 5 === 0) { renderLogs(); drawOverlay() }
+  }
+  await window.sjomatning.appendLiveData({ id: live.session.id, raw, point })
+  $('liveReadout').innerHTML = `<span>GPS <strong>${live.position ? `${live.position.lat.toFixed(6)}, ${live.position.lon.toFixed(6)}` : 'väntar…'}</strong></span><span>Djup <strong>${Number.isFinite(live.depth) ? `${live.depth.toFixed(2)} m` : 'väntar…'}</strong></span>`
+}
+
+let captureStarting = false
+async function startSimulator() {
+  if (state.live || captureStarting) return
+  captureStarting = true
+  $('startSimulator').disabled = $('startCapture').disabled = true
+  try {
+    const factor = Number($('simulationSpeed').value)
+    const session = await window.sjomatning.startLiveSession({ name: 'SIMULERAD-Roxen', simulated: true, timeFactor: factor })
+    const log = { name: `SIMULERAD Roxen ${new Date().toLocaleTimeString('sv-SE')}`, date: today(), points: [], warnings: [], color: colors[state.logs.length % colors.length], visible: true, depthAdjustment: 0, pruneDistance: 0, waterLevel: null, correction: null }
+    const live = { session, log, position: null, depth: null, cancelled: false, simulated: true }
+    state.live = live
+    state.logs.push(log)
+    $('liveBadge').textContent = 'Simulerar'; $('liveBadge').className = 'badge success'
+    $('startSimulator').classList.add('hidden'); $('startCapture').classList.add('hidden'); $('stopCapture').classList.remove('hidden')
+    $('simulationSpeed').disabled = true
+    $('livePath').textContent = `Simulerade data sparas i ${session.folder}`
+    void loadRoxenMap({ north: 58.54, south: 58.475, west: 15.54, east: 15.72 }, 13).catch(error => toast(error.message))
+    const epoch = new Date()
+    const started = performance.now()
+    const tick = async () => {
+      if (live.cancelled) return
+      try {
+        const seconds = (performance.now() - started) / 1000 * factor
+        const frame = simulationFrame(seconds, epoch)
+        live.course = frame.course
+        for (const raw of frame.sentences) await receiveNmea(live, raw)
+        renderLogs(); drawOverlay()
+        if (!live.cancelled) live.timer = setTimeout(() => { live.pending = tick() }, 1000)
+      } catch (error) {
+        toast(`Simulatorn stoppades: ${error.message}`)
+        setTimeout(() => { if (state.live === live) void stopCapture() }, 0)
+      }
+    }
+    live.pending = tick()
+  } catch (error) { toast(`Kunde inte starta simulatorn: ${error.message}`) }
+  finally { captureStarting = false; $('startSimulator').disabled = $('startCapture').disabled = false }
+}
+
+async function stopCapture() {
+  const live = state.live
+  if (!live) return
+  state.live = null; live.cancelled = true
+  clearTimeout(live.timer)
+  await live.pending
+  await live.reader?.cancel().catch(() => {})
+  await live.port?.close().catch(() => {})
+  await window.sjomatning.stopLiveSession(live.session.id).catch(() => {})
+  $('liveBadge').textContent = 'Frånkopplad'; $('liveBadge').className = 'badge warning'
+  $('simulationSpeed').disabled = false; $('startSimulator').classList.remove('hidden'); $('startCapture').classList.remove('hidden'); $('stopCapture').classList.add('hidden')
+  renderLogs(); drawOverlay(); toast(`Mätningen stoppades. ${live.log.points.length} punkter sparades i realtid.`)
+}
+
+$('startCapture').addEventListener('click', startCapture)
+$('stopCapture').addEventListener('click', stopCapture)
+
+$('startSimulator').addEventListener('click', startSimulator)
