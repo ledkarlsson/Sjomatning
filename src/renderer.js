@@ -16,6 +16,7 @@ const wrap = $('canvasWrap')
 const viewportElement = $('viewport')
 const waterLevelRequests = new Map()
 let manuscriptOffset = { x: 0, y: 0 }
+let showManuscripts = false
 
 function toast(message) {
   $('toast').textContent = message
@@ -36,7 +37,7 @@ function parseGeoPdf(bytes) {
   const values = match => match[1].trim().split(/\s+/).map(Number)
   const geo = values(gpts)
   const local = values(lpts)
-  if (geo.length < 6 || local.length !== geo.length) return null
+  if (geo.length < 6 || geo.length % 2 || local.length !== geo.length || ![...geo, ...local].every(Number.isFinite)) return null
   return geo.reduce((points, value, index) => {
     if (index % 2 === 0) points.push({ lat: value, lon: geo[index + 1], nx: local[index], ny: local[index + 1] })
     return points
@@ -171,6 +172,91 @@ async function loadPdfFile(file) {
   }
 }
 
+// Keep PDF rasters separate from the map canvas so tile refreshes cannot erase them.
+async function manuscriptRaster(file) {
+  if (file.mapRaster) return file.mapRaster
+  if (file.mapRasterLoading || file.mapRasterFailed) return null
+  file.mapRasterLoading = true
+  let pdf
+  try {
+    pdf = await pdfjsLib.getDocument({ data: new Uint8Array(file.bytes).slice() }).promise
+    const page = await pdf.getPage(1)
+    const original = page.getViewport({ scale: 1 })
+    const viewport = page.getViewport({ scale: Math.min(2, 2400 / Math.max(original.width, original.height)) })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height)
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    // LPTS coordinates belong to the geographic viewport, which can be smaller than the page.
+    const raw = new TextDecoder('latin1').decode(new Uint8Array(file.bytes))
+    const match = raw.match(/\/VP\s*\[\s*<<\s*\/BBox\s*\[([^\]]+)\]/)
+    const box = match ? match[1].trim().split(/\s+/).map(Number) : page.view
+    const a = viewport.convertToViewportPoint(box[0], box[1])
+    const b = viewport.convertToViewportPoint(box[2], box[3])
+    const crop = { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0]-a[0]), height: Math.abs(b[1]-a[1]) }
+    if (![crop.x, crop.y, crop.width, crop.height].every(Number.isFinite) || !crop.width || !crop.height) throw new Error('Ogiltig geografisk yta')
+    file.mapRaster = { canvas, crop }
+  } catch (error) {
+    file.mapRasterFailed = true
+    toast(`Kunde inte visa ${file.name} i kartan: ${error.message}`)
+  } finally {
+    file.mapRasterLoading = false
+    if (pdf) await pdf.destroy()
+    scheduleMapDraw()
+  }
+  return file.mapRaster
+}
+
+function manuscriptGeometry(file) {
+  const points = parseGeoPdf(new Uint8Array(file.bytes))
+  if (!points) return null
+  const t = affineFit(points.map(p => ({ x: p.nx, y: 1 - p.ny, lat: p.lat, lon: p.lon })))
+  if (!t || ![...t.lon, ...t.lat].every(Number.isFinite)) return null
+  return (x, y) => ({ lon: t.lon[0]*x + t.lon[1]*y + t.lon[2], lat: t.lat[0]*x + t.lat[1]*y + t.lat[2] })
+}
+
+function drawManuscripts(context, map) {
+  state.library.pdfs.forEach((file, index) => {
+    if (!file.hasGeoData) return
+    const geo = file.mapGeometry || (file.mapGeometry = manuscriptGeometry(file))
+    if (!geo) return
+    const project = (x, y) => { const p = geo(x, y); return geoToMapPixel(map, p.lat, p.lon) }
+    const corners = [[0,0], [1,0], [1,1], [0,1]].map(p => project(...p))
+    if (Math.max(...corners.map(p => p.x)) < 0 || Math.min(...corners.map(p => p.x)) > map.width || Math.max(...corners.map(p => p.y)) < 0 || Math.min(...corners.map(p => p.y)) > map.height) return
+    const color = colors[index % colors.length]
+    context.save()
+    if (showManuscripts && !file.mapRaster) void manuscriptRaster(file)
+    if (showManuscripts && file.mapRaster) {
+      const { canvas, crop } = file.mapRaster
+      // Subdivide to follow Mercator curvature as well as rotated manuscript edges.
+      const steps = 12
+      for (let row = 0; row < steps; row++) for (let col = 0; col < steps; col++) {
+        const x = col/steps, y = row/steps, d = 1/steps
+        for (const vertices of [[[x,y],[x+d,y],[x+d,y+d]], [[x,y],[x+d,y+d],[x,y+d]]]) {
+          const targets = vertices.map(p => project(...p))
+          const fit = affineFit(vertices.map((p,i) => ({ x: crop.x+p[0]*crop.width, y: crop.y+p[1]*crop.height, lon: targets[i].x, lat: targets[i].y })))
+          if (!fit) continue
+          context.save(); context.beginPath()
+          targets.forEach((p,i) => i ? context.lineTo(p.x,p.y) : context.moveTo(p.x,p.y))
+          context.closePath(); context.clip()
+          context.transform(fit.lon[0],fit.lat[0],fit.lon[1],fit.lat[1],fit.lon[2],fit.lat[2])
+          context.drawImage(canvas,0,0); context.restore()
+        }
+      }
+    }
+    context.beginPath()
+    corners.forEach((p,i) => i ? context.lineTo(p.x,p.y) : context.moveTo(p.x,p.y))
+    context.closePath()
+    if (!showManuscripts || !file.mapRaster) { context.fillStyle = color + '22'; context.fill() }
+    context.strokeStyle = color; context.lineWidth = 2; context.stroke()
+    context.font = '12px sans-serif'
+    const labelX = Math.max(4, Math.min(map.width - 160, corners[0].x))
+    const labelY = Math.max(18, Math.min(map.height - 4, corners[0].y))
+    context.fillStyle = '#ffffff'; context.fillRect(labelX-2,labelY-14,context.measureText(file.name).width+8,18)
+    context.fillStyle = color; context.fillText(file.name,labelX+2,labelY)
+    context.restore()
+  })
+}
+
 const tileCache = new Map()
 let mapFrame = null
 function scheduleMapDraw() {
@@ -219,6 +305,7 @@ function drawWebMap() {
       if (marks) context.drawImage(marks, tile.dx, tile.dy, tile.size + .5, tile.size + .5)
     }
   }
+  drawManuscripts(context, map)
   $('mapLoadStatus').classList.toggle('hidden', loaded > 0)
   drawOverlay()
 }
@@ -307,6 +394,7 @@ async function addLibraryFiles(files, folders = [], quiet = false) {
     }
   }
   renderFolder()
+  scheduleMapDraw()
   if (duplicates && !quiet) toast(`${duplicates} identisk${duplicates === 1 ? ' fil' : 'a filer'} hoppades över.`)
 }
 
@@ -336,7 +424,7 @@ function renderFolder() {
   const pdfCard = (file, index) => `
     <div class="folder-file-card">
       <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.hasGeoData ? 'GeoPDF' : 'Utan geodata'}</i></span></div>
-      <div class="file-actions"><button class="small-button" data-folder-pdf="${index}">Öppna</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort PDF">×</button></div>
+      <div class="file-actions">${file.hasGeoData ? `<button class="small-button" data-locate-pdf="${index}">Visa i kartan</button>` : ''}<button class="small-button" data-folder-pdf="${index}">Öppna</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort PDF">×</button></div>
     </div>`
   const pdfGroups = [
     ['Med geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => item.file.hasGeoData)],
@@ -354,6 +442,12 @@ function renderFolder() {
     : [['Mätspår', indexedTracks]]
   $('folderTrackList').innerHTML = indexedTracks.length ? trackGroups.filter(([, items]) => items.length).map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => trackCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
 
+  document.querySelectorAll('[data-locate-pdf]').forEach(button => button.addEventListener('click', () => {
+    const geo = manuscriptGeometry(folder.pdfs[Number(button.dataset.locatePdf)])
+    if (!geo) return toast('Fältmanusets geodata kunde inte tolkas.')
+    const corners = [[0,0],[1,0],[1,1],[0,1]].map(p => geo(...p))
+    loadRoxenMap({ north: Math.max(...corners.map(p => p.lat)), south: Math.min(...corners.map(p => p.lat)), east: Math.max(...corners.map(p => p.lon)), west: Math.min(...corners.map(p => p.lon)) })
+  }))
   document.querySelectorAll('[data-folder-pdf]').forEach(button => button.addEventListener('click', () => loadPdfFile(folder.pdfs[Number(button.dataset.folderPdf)])))
   document.querySelectorAll('[data-folder-track]').forEach(button => button.addEventListener('click', () => toggleFolderTrack(Number(button.dataset.folderTrack))))
   document.querySelectorAll('[data-delete-pdf]').forEach(button => button.addEventListener('click', () => deleteLibraryFile('pdf', Number(button.dataset.deletePdf))))
@@ -379,7 +473,7 @@ async function deleteLibraryFile(type, index) {
     collection.splice(index, 1)
     if (type === 'track') state.logs = state.logs.filter(log => log.sourceId !== file.id)
     if (type === 'pdf' && state.activePdfId === file.id) clearActivePdf()
-    renderFolder(); renderLogs(); drawOverlay()
+    renderFolder(); renderLogs(); drawOverlay(); scheduleMapDraw()
     if (!state.library.pdfs.length && !state.library.tracks.length) $('folderPanel').classList.add('hidden')
   } catch (error) { toast(`Kunde inte ta bort filen: ${error.message}`) }
 }
@@ -758,6 +852,13 @@ $('clearCalibration').addEventListener('click', () => {
 })
 $('openPdf').addEventListener('click', openPdf)
 $('openRoxenMap').addEventListener('click', () => loadRoxenMap())
+$('toggleManuscripts').addEventListener('click', async () => {
+  showManuscripts = !showManuscripts
+  $('toggleManuscripts').setAttribute('aria-pressed', String(showManuscripts))
+  $('toggleManuscripts').textContent = showManuscripts ? 'Dölj fältmanus' : 'Visa fältmanus'
+  if (!state.map) await loadRoxenMap()
+  scheduleMapDraw()
+})
 $('showSweden').addEventListener('click', () => loadRoxenMap(SWEDEN_BOUNDS))
 $('openFolder').addEventListener('click', openFolder)
 $('emptyOpenPdf').addEventListener('click', openPdf)
