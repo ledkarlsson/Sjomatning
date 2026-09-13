@@ -1,0 +1,57 @@
+PC Chart plotter and GPS Navigation software
+
+SeaClear is a PC based chart plotter for Windows 2000/XP/NT/95/98/ME. With a GPS connected it displays the current position, speed, heading and other data on the screen. The chart is repositioned and new charts are loaded automatically as needed. Tracks may be saved to file for later reviewing and log book entries can be manually and automatically entered. Unlimited number of routes and waypoints can be created and used to assist the navigation. The screen area for charts is maximized with most functions accessed with the right mouse button. Zooming is provided with support for IntelliMouse wheel. SeaClear is created for nautical navigation but can probably be used for other navigation needs.
+
+
+
+Features
+
+License
+
+Downloads
+
+History
+
+
+
+
+Features and Requirements:
+
+SeaClear works on most PC's running Windows 95 and up, but  as Windows 95/98/ME has many limitations, Windows 2000/XP/Vista is recommended. No Linux version is available but SeaClear is reported to work well with Wine, see WineHQ for more details.
+
+GPS:
+
+The GPS must be capable of transmitting NMEA 0183 1.5 or higher messages. Most modern GPS units with PC communication will work.  Virtual serial ports, such as USB GPS units with serial drivers, are supported. Optionally other NMEA instruments may be connected. Depth, Compass and Wind is displayed if present. With AIS receiver connected targets are displayed on screen. On units capable of receiving NMEA waypoint and route data, uploading from the PC is supported.
+
+Charts:
+
+SeaClear II uses raster charts and can use most BSB/KAP version 1 - 3 and GEO/NOS commercial charts. Encrypted charts, like BSB/CAP can not be used. Most common projections are supported. Chart datum's are supported. You can add your own charts, scan or capture them, save as PNG, BMP or other common format. Skewed and rotated charts can be calibrated. Chart border can be set to reduce the actual chart area.
+
+Routes:
+
+Unlimited number of routes are easily created. Maximum number of route points limited by memory only. Several routes may be joined.  Tracks can be imported. Cross track error alarm. Calculation of time to go, total time to go, bearings, steering indicator and output to NMEA.
+
+Waypoints:
+
+Unlimited number of waypoint files can be created. Maximum number of waypoints limited by memory only. Multiple files can be merged. Quick locate of waypoint loads map and centers waypoint on screen.
+
+Tracks:
+
+Tracks are saved to file and plotted. Saved tracks can later be plotted and used to create routes.
+
+Logbook:
+
+Automatic and manual log book entries into a text file.
+
+Import / Export:
+
+Import and export of routes, waypoints and tracks using G7ToWin and to G7T and Waypoint+ text file format. Export of waypoints and routes to supporting NMEA devices.
+
+Language independent:
+
+Most text and menus can be user translated to any language without any special tools.
+Several languages are included (Documentation file in English).
+
+Other:
+
+NMEA Depth, Wind, Compass and AIS. GPS based Log, Hours and estimated fuel consumption. Night modes with shaded charts.

@@ -191,7 +191,8 @@ app.whenReady().then(() => {
 })
 
 ipcMain.handle('updater:install', () => {
-  if (app.isPackaged) autoUpdater.quitAndInstall(false, true)
+  // Install silently and restart the app when the update has finished.
+  if (app.isPackaged) autoUpdater.quitAndInstall(true, true)
 })
 
 app.on('window-all-closed', () => {
