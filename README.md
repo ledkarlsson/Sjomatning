@@ -2,6 +2,20 @@
 
 En Windowsapp som visar en karta över sjön Roxen, kan öppna och kalibrera PDF-fältmanus samt visa loggar med mätspår och djup. Kräver internetanslutning.
 
+## Skärmbilder
+
+Samma kartutsnitt vid Granholmen med mätspåret **exempelspår.txt** synligt i båda vyerna.
+
+**Utan fältmanus** – spåret visas på bakgrundskartan. Den röda ramen visar fältmanusets utbredning.
+
+![Mätspåret exempelspår runt Granholmen på bakgrundskartan utan fältmanus](docs/screenshots/utan-faltmanus.png)
+
+**Med fältmanus** – samma spår visas ovanpå fältmanuset.
+
+![Mätspåret exempelspår runt Granholmen ovanpå fältmanuset](docs/screenshots/med-faltmanus.png)
+
+## Öppna fältmanus och mätspår
+
 I appen laddas Roxenkartan automatiskt. Därefter kan du lägga till mätspår direkt. För egna fältmanus:
 
 1. Öppna ett fältmanus i PDF-format via **Lägg till → Välj filer** i biblioteket, eller dra PDF-filen direkt dit. Välj **Gå till plats** för att visa området; manus utan geodata öppnas för kalibrering.
