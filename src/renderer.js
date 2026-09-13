@@ -1,6 +1,6 @@
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
-import { createWebMap, geoToMapPixel, mapPixelToGeo, tilesForMap } from './web-map.mjs'
+import { ROXEN_BOUNDS, createWebMap, geoToMapPixel, mapPixelToGeo, tilesForMap } from './web-map.mjs'
 import { adjustedDepth, exportCsv, exportWaypoints, processedPoints, trackDate } from './track-processing.mjs'
 import { simulationFrame } from './nmea-simulator.mjs'
 import { parseNmeaSentence } from './nmea-parser.mjs'
@@ -178,7 +178,7 @@ function loadTile(url) {
   })
 }
 
-async function loadRoxenMap(bounds, zoom) {
+async function loadRoxenMap(bounds = ROXEN_BOUNDS, zoom = 11) {
   const map = createWebMap(bounds, zoom)
   state.pdf = null
   state.pdfKey = null
@@ -196,19 +196,7 @@ async function loadRoxenMap(bounds, zoom) {
   const context = pdfCanvas.getContext('2d')
   context.fillStyle = '#dce8e5'
   context.fillRect(0, 0, state.width, state.height)
-  const tiles = tilesForMap(map)
-  let failures = 0
-  await Promise.all(tiles.map(async tile => {
-    try {
-      const base = await loadTile(`https://tile.openstreetmap.org/${map.zoom}/${tile.x}/${tile.y}.png`)
-      context.drawImage(base, tile.dx, tile.dy)
-      try {
-        const nautical = await loadTile(`https://tiles.openseamap.org/seamark/${map.zoom}/${tile.x}/${tile.y}.png`)
-        context.drawImage(nautical, tile.dx, tile.dy)
-      } catch { /* Sjömärkeslagret kan sakna en enskild ruta. */ }
-    } catch { failures += 1 }
-  }))
-  $('documentName').textContent = 'Sverige · kostnadsfri översiktskarta'
+  $('documentName').textContent = 'Roxen · kostnadsfri översiktskarta'
   $('pageInfo').textContent = 'Översiktskarta · ej för navigation'
   $('geoBadge').textContent = 'Automatisk GPS-karta'
   $('geoBadge').className = 'badge success'
@@ -223,6 +211,21 @@ async function loadRoxenMap(bounds, zoom) {
   renderFolder()
   renderLogs()
   drawOverlay()
+  const tiles = tilesForMap(map)
+  let failures = 0
+  await Promise.all(tiles.map(async tile => {
+    try {
+      const base = await loadTile(`https://tile.openstreetmap.org/${map.zoom}/${tile.x}/${tile.y}.png`)
+      if (state.map !== map) return
+      context.drawImage(base, tile.dx, tile.dy)
+      try {
+        const nautical = await loadTile(`https://tiles.openseamap.org/seamark/${map.zoom}/${tile.x}/${tile.y}.png`)
+        if (state.map !== map) return
+        context.drawImage(nautical, tile.dx, tile.dy)
+      } catch { /* Sjömärkeslagret kan sakna en enskild ruta. */ }
+    } catch { failures += 1 }
+  }))
+  if (state.map !== map) return
   if (failures === tiles.length) toast('Kartan kunde inte hämtas. Kontrollera internetanslutningen.')
   else if (failures) toast(`Kartan laddades, men ${failures} kartdelar saknas.`)
 }

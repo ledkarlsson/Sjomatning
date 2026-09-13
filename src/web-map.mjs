@@ -7,6 +7,13 @@ export const SWEDEN_BOUNDS = Object.freeze({
 
 export const SWEDEN_TILE_ZOOM = 6
 
+export const ROXEN_BOUNDS = Object.freeze({
+  north: 58.62,
+  south: 58.44,
+  west: 15.48,
+  east: 15.92
+})
+
 function clampLatitude(latitude) {
   return Math.max(-85.05112878, Math.min(85.05112878, latitude))
 }
