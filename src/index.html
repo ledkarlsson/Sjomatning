@@ -27,7 +27,7 @@
     </div>
 
     <main class="layout">
-      <aside class="sidebar">
+      <aside class="sidebar" id="sidebar">
         <section class="panel hidden" id="folderPanel">
           <div class="panel-help"><button type="button" class="help-button" aria-label="Hjälp" aria-describedby="folderPanelHelp">?</button><span id="folderPanelHelp" class="help-text" role="tooltip">Öppna en mapp för att samla fältmanus och mätspår. Välj en fil i biblioteket för att visa den.</span></div>
           <div class="panel-heading">
@@ -137,9 +137,11 @@
       <section class="workspace">
         <div class="toolbar">
           <div class="tool-group">
+            <button id="toggleSidebar" class="text-button" aria-controls="sidebar" aria-expanded="true">Dölj meny</button>
             <button id="zoomOut" class="icon-button" title="Zooma ut">−</button>
             <output id="zoomValue">100 %</output>
             <button id="zoomIn" class="icon-button" title="Zooma in">+</button>
+            <button id="showSweden" class="text-button">Sverige</button>
             <button id="fitView" class="text-button">Anpassa</button>
           </div>
           <div id="cursorPosition" class="cursor-position">Ingen geografisk position</div>
@@ -157,6 +159,7 @@
             <p>Öppna ett PDF-manus och lägg sedan mätspåren direkt ovanpå kartan. Du kan även släppa PDF-, TXT- och TRC-filer här.</p>
             <button id="emptyOpenPdf" class="button primary">Välj fältmanus</button>
           </div>
+          <div id="mapLoadStatus" class="map-load-status hidden">Laddar karta… Kontrollera internetanslutningen om kartan inte visas.</div>
           <div id="canvasWrap" class="canvas-wrap hidden">
             <canvas id="pdfCanvas"></canvas>
             <canvas id="overlayCanvas"></canvas>

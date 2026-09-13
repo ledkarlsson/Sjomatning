@@ -170,3 +170,17 @@ canvas { position: absolute; inset: 0; display: block; }
 .panel-help:hover, .panel-help:focus-within { z-index: 6; }
 .panel-help:hover .help-text, .panel-help:focus-within .help-text { display: block; }
 #documentName { padding-right: 24px; overflow-wrap: anywhere; }
+
+/* A continuous map fills the workspace; PDF pages retain their paper margins. */
+.viewport.web-map { overflow: hidden; background: #e5ece9; touch-action: none; }
+.web-map .canvas-wrap { margin: 0; box-shadow: none; }
+.web-map .map-attribution { position: fixed; right: 8px; bottom: 8px; }
+.map-load-status { position: absolute; z-index: 4; left: 50%; top: 24px; transform: translateX(-50%); max-width: 420px; padding: 12px 16px; border-radius: 8px; background: white; box-shadow: 0 2px 12px #16302b18; color: var(--muted); font-size: 12px; }
+.viewport:not(.web-map) .map-load-status { display: none; }
+.icon-button { width: 34px; height: 34px; }
+
+.layout.sidebar-hidden { grid-template-columns: minmax(0, 1fr); }
+.layout.sidebar-hidden .sidebar { display: none; }
+.layout.sidebar-hidden .drop-overlay { left: 18px; }
+.viewport { overflow: hidden; touch-action: none; }
+.canvas-wrap { position: absolute; left: 0; top: 0; }

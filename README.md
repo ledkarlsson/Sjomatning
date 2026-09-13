@@ -1,15 +1,6 @@
 # Sjömätning
 
-En Windowsapp som automatiskt visar en kostnadsfri GPS-karta över Roxen, kan öppna och kalibrera PDF-fältmanus samt visar SeaClear-loggar med mätspår och djup. Roxenkartan använder OpenStreetMap som bakgrund och OpenSeaMap som nautiskt lager och kräver internetanslutning. Den fria kartan är en översiktskarta och ersätter inte ett officiellt sjökort för navigation; Sjöfartsverkets kompletta sjökortsdata är licensierad.
-
-## Kom igång
-
-Krav: Node.js 22 eller senare.
-
-```powershell
-npm install
-npm start
-```
+En Windowsapp som visar en karta över sjön Roxen, kan öppna och kalibrera PDF-fältmanus samt visa loggar med mätspår och djup. Kräver internetanslutning.
 
 I appen laddas Roxenkartan automatiskt. Därefter kan du lägga till mätspår direkt. För egna fältmanus:
 
@@ -17,6 +8,7 @@ I appen laddas Roxenkartan automatiskt. Därefter kan du lägga till mätspår d
 2. Om PDF:en är en GeoPDF läses georefereringen automatiskt.
 3. För ett vanligt PDF-manus: ange latitud och longitud för en känd punkt, välj **Placera referenspunkt** och klicka på punkten i kartan. Upprepa med minst två diagonalt placerade punkter; tre punkter ger en bättre affin kalibrering. Kalibreringen sparas lokalt.
 4. Lägg till en eller flera `.TXT`- eller `.CSV`-loggar. Spår och djup visas ovanpå kartan.
+
 
 ## Mät direkt från GPS och ekolod
 
@@ -33,6 +25,17 @@ Det aktiva spåret syns direkt på kartan och kan exporteras som CSV eller SeaCl
 
 Vattenstånd läses ur loggfilnamn av formen `20240716_33.53_Pioner_Husholmen_trace.TXT` och korrigeras mot normalvattennivån 33,00 meter. Råfilen ändras aldrig.
 
+
+## Kom igång med utveckling
+
+Krav: Node.js 22 eller senare.
+
+```powershell
+npm install
+npm start
+```
+
+
 ## Test och Windowsbygge
 
 ```powershell
@@ -45,20 +48,22 @@ Installationsfil, blockmap och `latest.yml` hamnar i `out/`. `latest.yml` och bl
 
 ## GitHub Actions och releaser
 
-Workflow-filen `.github/workflows/windows.yml` kör tester och skapar Windowsbyggen för varje push och pull request. Byggena går att hämta som GitHub Actions-artefakter.
+Workflow-filen `.github/workflows/windows.yml` kör tester, syntaxkontroll och Windowsbygge vid push till `main`, pull requests mot `main` och manuell körning via GitHub Actions. Byggena sparas som GitHub Actions-artefakter. Endast push till `main` publicerar en GitHub Release.
 
-För att publicera en version:
+För att publicera en ny version:
 
-1. Ändra `version` i `package.json`, exempelvis till `0.1.1`.
-2. Committa ändringen.
-3. Skapa och pusha motsvarande tagg:
+1. Committa ändringarna på `main`.
+2. Pusha till GitHub:
 
 ```powershell
-git tag v0.1.1
-git push origin main --tags
+git push origin main
 ```
 
-Taggen måste matcha versionen i `package.json`. Workflow-flödet skapar då en GitHub Release med installationen och uppdateringsmetadata. Installerade program söker efter nya versioner vid start och därefter var tionde minut, laddar ner dem i bakgrunden och erbjuder installation.
+3. Kontrollera att workflow-körningen **Windowsbygge** blir grön och att den nya versionen finns under **Releases**.
+
+Du behöver inte ändra `version` eller `buildDate` i `package.json` och inte heller skapa en tagg manuellt. Vid push sätter workflow-flödet versionen till `0.2.<GitHub Actions-körningsnummer>` och byggdatumet till dagens UTC-datum. Värdena ändras i byggmiljön och committas inte tillbaka till repot.
+
+När tester, syntaxkontroll och bygge har lyckats skapas releasen med taggen `v0.2.<körningsnummer>`, Windowsinstallationen, blockmap-filen och `latest.yml`. Installerade program söker efter nya versioner vid start och därefter var tionde minut, laddar ner dem i bakgrunden och erbjuder installation.
 
 GitHub-repot måste vara publikt för tokenfri automatisk uppdatering. Windowsbyggena är ännu inte kodsignerade, så Windows SmartScreen kan visa en varning tills ett kodsigneringscertifikat konfigureras.
 
@@ -102,7 +107,7 @@ Med **Öppna mapp** inventerar appen PDF-manus och mätspår även i undermappar
 
 Flera mappar kan läggas till med filväljaren eller genom drag-and-drop. Identiska filer identifieras med SHA-256 och importeras bara en gång. När kartan har geodata visar både biblioteket och listan över importerade spår hur många punkter som ryms inom kartan.
 
-Varje push till `main` får en unik version och publiceras automatiskt som en GitHub Release tillsammans med `latest.yml`. Installerade versioner hämtar uppdateringen i bakgrunden och visar en knapp för att starta om och installera när den är klar. Knappen installerar uppdateringen tyst utan installationsguide och startar sedan programmet igen. Första installationen använder fortfarande installationsguiden.
+Varje lyckat versionsbygge efter push till `main` publiceras automatiskt som en GitHub Release tillsammans med `latest.yml`, enligt flödet ovan. Installerade versioner hämtar uppdateringen i bakgrunden och visar en knapp för att starta om och installera när den är klar. Knappen installerar uppdateringen tyst utan installationsguide och startar sedan programmet igen. Första installationen använder fortfarande installationsguiden.
 
 Appen använder en separat Chromium-cache och tillåter bara en körande instans. Det förhindrar Windows-felet `Unable to move/create cache` vid snabb omstart och efter automatisk uppdatering.
 

@@ -71,3 +71,48 @@ export function tilesForMap(map) {
   }
   return tiles
 }
+
+// The web map is a viewport into world coordinates, never a fixed image crop.
+export function viewportMap(center, zoom, width, height) {
+  zoom = Math.max(3, Math.min(18, zoom))
+  const size = 256 * 2 ** zoom
+  const left = lonToWorldX(center.lon, zoom) - width / 2
+  const top = Math.max(0, Math.min(size - height, latToWorldY(center.lat, zoom) - height / 2))
+  return { zoom, left, top, width, height }
+}
+
+export function fitBounds(bounds, width, height) {
+  const spanX = lonToWorldX(bounds.east, 0) - lonToWorldX(bounds.west, 0)
+  const spanY = latToWorldY(bounds.south, 0) - latToWorldY(bounds.north, 0)
+  const zoom = Math.log2(Math.min(Math.max(1, width - 48) / spanX, Math.max(1, height - 48) / spanY))
+  return viewportMap({ lon: (bounds.west + bounds.east) / 2,
+    lat: worldYToLat((latToWorldY(bounds.north, 0) + latToWorldY(bounds.south, 0)) / 2, 0)
+  }, zoom, width, height)
+}
+
+export function panMap(map, dx, dy) {
+  return viewportMap(mapPixelToGeo(map, map.width / 2 - dx, map.height / 2 - dy), map.zoom, map.width, map.height)
+}
+
+export function zoomMap(map, zoom, x = map.width / 2, y = map.height / 2) {
+  zoom = Math.max(3, Math.min(18, zoom))
+  const anchor = mapPixelToGeo(map, x, y)
+  const center = {
+    lon: ((lonToWorldX(anchor.lon, zoom) - x + map.width / 2) / (256 * 2 ** zoom)) * 360 - 180,
+    lat: worldYToLat(latToWorldY(anchor.lat, zoom) - y + map.height / 2, zoom)
+  }
+  return viewportMap(center, zoom, map.width, map.height)
+}
+
+export function visibleTiles(map) {
+  const zoom = Math.floor(map.zoom)
+  const size = 256 * 2 ** (map.zoom - zoom)
+  const count = 2 ** zoom
+  const tiles = []
+  for (let y = Math.max(0, Math.floor(map.top / size)); y <= Math.min(count - 1, Math.floor((map.top + map.height - 1) / size)); y++) {
+    for (let x = Math.floor(map.left / size); x <= Math.floor((map.left + map.width - 1) / size); x++) {
+      tiles.push({ zoom, x: ((x % count) + count) % count, y, dx: x * size - map.left, dy: y * size - map.top, size })
+    }
+  }
+  return tiles
+}

@@ -1,6 +1,6 @@
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack } from './track-parser.mjs'
-import { ROXEN_BOUNDS, createWebMap, geoToMapPixel, mapPixelToGeo, tilesForMap } from './web-map.mjs'
+import { ROXEN_BOUNDS, SWEDEN_BOUNDS, fitBounds, viewportMap, panMap, zoomMap, visibleTiles, geoToMapPixel, mapPixelToGeo } from './web-map.mjs'
 import { adjustedDepth, exportCsv, exportWaypoints, processedPoints, trackDate } from './track-processing.mjs'
 import { simulationFrame } from './nmea-simulator.mjs'
 import { parseNmeaSentence } from './nmea-parser.mjs'
@@ -15,6 +15,7 @@ const overlay = $('overlayCanvas')
 const wrap = $('canvasWrap')
 const viewportElement = $('viewport')
 const waterLevelRequests = new Map()
+let manuscriptOffset = { x: 0, y: 0 }
 
 function toast(message) {
   $('toast').textContent = message
@@ -128,6 +129,7 @@ async function loadPdfFile(file) {
   try {
     const bytes = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
     state.map = null
+    viewportElement.classList.remove('web-map')
     $('mapAttribution').classList.add('hidden')
     state.pdfKey = `${file.name}:${bytes.byteLength}`
     state.activePdfId = file.id || null
@@ -169,33 +171,84 @@ async function loadPdfFile(file) {
   }
 }
 
-function loadTile(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`Kunde inte hämta ${url}`))
-    image.src = url
+const tileCache = new Map()
+let mapFrame = null
+function scheduleMapDraw() {
+  if (mapFrame != null) return
+  mapFrame = requestAnimationFrame(() => {
+    mapFrame = null
+    if (state.map) drawWebMap()
   })
 }
 
-async function loadRoxenMap(bounds = ROXEN_BOUNDS, zoom = 11) {
-  const map = createWebMap(bounds, zoom)
+function cachedTile(url) {
+  let entry = tileCache.get(url)
+  if (entry) return entry.image
+  const image = new Image()
+  entry = { image: null, failed: false }
+  tileCache.set(url, entry)
+  const timeout = setTimeout(() => { image.src = ''; finish(false) }, 12000)
+  function finish(ok) {
+    clearTimeout(timeout)
+    image.onload = image.onerror = null
+    entry.image = ok ? image : null
+    entry.failed = !ok
+    scheduleMapDraw()
+  }
+  image.onload = () => finish(true)
+  image.onerror = () => finish(false)
+  image.src = url
+  // Bound memory during long surveying sessions.
+  if (tileCache.size > 400) tileCache.delete(tileCache.keys().next().value)
+  return null
+}
+
+function drawWebMap() {
+  const map = state.map
+  const context = pdfCanvas.getContext('2d')
+  context.fillStyle = '#e5ece9'
+  context.fillRect(0, 0, map.width, map.height)
+  let loaded = 0
+  for (const tile of visibleTiles(map)) {
+    const base = cachedTile(`https://tile.openstreetmap.org/${tile.zoom}/${tile.x}/${tile.y}.png`)
+    if (!base) continue
+    loaded++
+    context.drawImage(base, tile.dx, tile.dy, tile.size + .5, tile.size + .5)
+    if (tile.zoom >= 9) {
+      const marks = cachedTile(`https://tiles.openseamap.org/seamark/${tile.zoom}/${tile.x}/${tile.y}.png`)
+      if (marks) context.drawImage(marks, tile.dx, tile.dy, tile.size + .5, tile.size + .5)
+    }
+  }
+  $('mapLoadStatus').classList.toggle('hidden', loaded > 0)
+  drawOverlay()
+}
+
+function showMap(map) {
+  state.map = map
+  state.width = map.width
+  state.height = map.height
+  state.scale = 1
+  if (pdfCanvas.width !== map.width || pdfCanvas.height !== map.height) {
+    pdfCanvas.width = overlay.width = map.width
+    pdfCanvas.height = overlay.height = map.height
+  }
+  wrap.style.width = pdfCanvas.style.width = overlay.style.width = `${map.width}px`
+  wrap.style.height = pdfCanvas.style.height = overlay.style.height = `${map.height}px`
+  wrap.style.margin = '0'
+  wrap.style.transform = ''
+  viewportElement.scrollTo(0, 0)
+  $('zoomValue').textContent = `Z ${map.zoom.toFixed(1)}`
+  scheduleMapDraw()
+}
+
+async function loadRoxenMap(bounds = ROXEN_BOUNDS) {
+  for (const [url, entry] of tileCache) if (entry.failed) tileCache.delete(url)
   state.pdf = null
   state.pdfKey = null
   state.activePdfId = null
   state.page = { webMap: true }
-  state.map = map
   state.calibration = []
   state.transform = { type: 'web-mercator' }
-  state.width = map.width
-  state.height = map.height
-  pdfCanvas.width = overlay.width = state.width
-  pdfCanvas.height = overlay.height = state.height
-  wrap.style.width = `${state.width}px`
-  wrap.style.height = `${state.height}px`
-  const context = pdfCanvas.getContext('2d')
-  context.fillStyle = '#dce8e5'
-  context.fillRect(0, 0, state.width, state.height)
   $('introPanel').classList.add('hidden')
   $('documentPanel').classList.add('hidden')
   $('calibrationPanel').classList.add('hidden')
@@ -203,27 +256,10 @@ async function loadRoxenMap(bounds = ROXEN_BOUNDS, zoom = 11) {
   $('mapAttribution').classList.remove('hidden')
   wrap.classList.remove('hidden')
   viewportElement.classList.remove('empty')
-  fitView()
+  viewportElement.classList.add('web-map')
+  showMap(fitBounds(bounds, viewportElement.clientWidth, viewportElement.clientHeight))
   renderFolder()
   renderLogs()
-  drawOverlay()
-  const tiles = tilesForMap(map)
-  let failures = 0
-  await Promise.all(tiles.map(async tile => {
-    try {
-      const base = await loadTile(`https://tile.openstreetmap.org/${map.zoom}/${tile.x}/${tile.y}.png`)
-      if (state.map !== map) return
-      context.drawImage(base, tile.dx, tile.dy)
-      try {
-        const nautical = await loadTile(`https://tiles.openseamap.org/seamark/${map.zoom}/${tile.x}/${tile.y}.png`)
-        if (state.map !== map) return
-        context.drawImage(nautical, tile.dx, tile.dy)
-      } catch { /* Sjömärkeslagret kan sakna en enskild ruta. */ }
-    } catch { failures += 1 }
-  }))
-  if (state.map !== map) return
-  if (failures === tiles.length) toast('Kartan kunde inte hämtas. Kontrollera internetanslutningen.')
-  else if (failures) toast(`Kartan laddades, men ${failures} kartdelar saknas.`)
 }
 
 async function openPdf() {
@@ -386,32 +422,43 @@ function updateGeoStatus() {
   renderLogs()
 }
 
-function setScale(scale) {
-  state.scale = Math.max(.2, Math.min(3, scale))
+function positionManuscript() {
+  wrap.style.margin = '0'
+  wrap.style.transform = `translate(${manuscriptOffset.x}px, ${manuscriptOffset.y}px)`
+}
+
+function setScale(scale, anchor = { x: viewportElement.clientWidth / 2, y: viewportElement.clientHeight / 2 }) {
+  if (state.map) return showMap(zoomMap(state.map, state.map.zoom + Math.log2(scale)))
+  const previousScale = state.scale
+  state.scale = Math.max(.05, Math.min(6, scale))
+  const ratio = state.scale / previousScale
+  manuscriptOffset = {
+    x: anchor.x - (anchor.x - manuscriptOffset.x) * ratio,
+    y: anchor.y - (anchor.y - manuscriptOffset.y) * ratio
+  }
   wrap.style.width = `${state.width * state.scale}px`
   wrap.style.height = `${state.height * state.scale}px`
   pdfCanvas.style.width = overlay.style.width = `${state.width * state.scale}px`
   pdfCanvas.style.height = overlay.style.height = `${state.height * state.scale}px`
+  positionManuscript()
   $('zoomValue').textContent = `${Math.round(state.scale * 100)} %`
 }
 
-function updatePanSpace() {
-  wrap.style.margin = `${Math.max(24, viewportElement.clientHeight / 2)}px ${Math.max(24, viewportElement.clientWidth / 2)}px`
-}
-
 function centerView() {
-  viewportElement.scrollTo(
-    wrap.offsetLeft + wrap.offsetWidth / 2 - viewportElement.clientWidth / 2,
-    wrap.offsetTop + wrap.offsetHeight / 2 - viewportElement.clientHeight / 2
-  )
+  manuscriptOffset = {
+    x: (viewportElement.clientWidth - state.width * state.scale) / 2,
+    y: (viewportElement.clientHeight - state.height * state.scale) / 2
+  }
+  positionManuscript()
 }
 
 function fitView() {
   if (!state.page) return
+  if (state.map) return showMap(fitBounds(ROXEN_BOUNDS, viewportElement.clientWidth, viewportElement.clientHeight))
+  previousViewport = { width: viewportElement.clientWidth, height: viewportElement.clientHeight }
   const availableWidth = viewportElement.clientWidth - 52
   const availableHeight = viewportElement.clientHeight - 52
   state.fitScale = Math.min(availableWidth / state.width, availableHeight / state.height)
-  updatePanSpace()
   setScale(state.fitScale)
   centerView()
 }
@@ -711,6 +758,7 @@ $('clearCalibration').addEventListener('click', () => {
 })
 $('openPdf').addEventListener('click', openPdf)
 $('openRoxenMap').addEventListener('click', () => loadRoxenMap())
+$('showSweden').addEventListener('click', () => loadRoxenMap(SWEDEN_BOUNDS))
 $('openFolder').addEventListener('click', openFolder)
 $('emptyOpenPdf').addEventListener('click', openPdf)
 $('openLogs').addEventListener('click', openLogs)
@@ -729,41 +777,63 @@ $('toggleLibrary').addEventListener('click', () => {
 $('zoomIn').addEventListener('click', () => setScale(state.scale * 1.2))
 $('zoomOut').addEventListener('click', () => setScale(state.scale / 1.2))
 $('fitView').addEventListener('click', fitView)
-window.addEventListener('resize', () => {
-  if (!state.page) return
-  if (Math.abs(state.scale - state.fitScale) < .02) fitView()
-  else updatePanSpace()
+function setSidebarHidden(hidden) {
+  document.querySelector('.layout').classList.toggle('sidebar-hidden', hidden)
+  $('toggleSidebar').textContent = hidden ? 'Visa meny' : 'Dölj meny'
+  $('toggleSidebar').setAttribute('aria-expanded', String(!hidden))
+  localStorage.setItem('sidebar:hidden', String(hidden))
+}
+$('toggleSidebar').addEventListener('click', () => {
+  setSidebarHidden(!document.querySelector('.layout').classList.contains('sidebar-hidden'))
 })
+setSidebarHidden(localStorage.getItem('sidebar:hidden') === 'true')
+
+let previousViewport = { width: viewportElement.clientWidth, height: viewportElement.clientHeight }
+new ResizeObserver(() => {
+  const width = viewportElement.clientWidth, height = viewportElement.clientHeight
+  const previous = previousViewport
+  previousViewport = { width, height }
+  if (!state.page || (width === previous.width && height === previous.height)) return
+  if (state.map) return showMap(viewportMap(mapPixelToGeo(state.map, state.width / 2, state.height / 2), state.map.zoom, width, height))
+  manuscriptOffset.x += (width - previous.width) / 2
+  manuscriptOffset.y += (height - previous.height) / 2
+  positionManuscript()
+}).observe(viewportElement)
 
 viewportElement.addEventListener('wheel', event => {
   if (!state.page) return
   event.preventDefault()
   const point = canvasPoint(event)
-  const nextScale = state.scale * Math.exp(-event.deltaY * .0015)
-  setScale(nextScale)
-  const rect = overlay.getBoundingClientRect()
-  viewportElement.scrollLeft += rect.left + point.x * state.scale - event.clientX
-  viewportElement.scrollTop += rect.top + point.y * state.scale - event.clientY
+  if (state.map) {
+    showMap(zoomMap(state.map, state.map.zoom - event.deltaY * .002, point.x, point.y))
+    return
+  }
+  const rect = viewportElement.getBoundingClientRect()
+  setScale(state.scale * Math.exp(-event.deltaY * .0015), { x: event.clientX - rect.left, y: event.clientY - rect.top })
 }, { passive: false })
 
 let pan = null
 let suppressClick = false
 viewportElement.addEventListener('pointerdown', event => {
   if (event.button !== 0 || !state.page) return
-  pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewportElement.scrollLeft, scrollTop: viewportElement.scrollTop, moved: false }
-  viewportElement.setPointerCapture(event.pointerId)
+  if (event.target.closest('a, button')) return
+  suppressClick = false
+  pan = { offset: { ...manuscriptOffset }, map: state.map, pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewportElement.scrollLeft, scrollTop: viewportElement.scrollTop, moved: false }
+  // Capture only after dragging starts so ordinary canvas clicks keep their target.
 })
 viewportElement.addEventListener('pointermove', event => {
   if (!pan || event.pointerId !== pan.pointerId) return
   if (!pan.moved && Math.hypot(event.clientX - pan.x, event.clientY - pan.y) < 4) return
   if (!pan.moved) {
     pan.moved = true
+    viewportElement.setPointerCapture(event.pointerId)
     viewportElement.classList.add('panning')
     $('tooltip').classList.add('hidden')
   }
   event.preventDefault()
-  viewportElement.scrollLeft = pan.scrollLeft - (event.clientX - pan.x)
-  viewportElement.scrollTop = pan.scrollTop - (event.clientY - pan.y)
+  if (pan.map) return showMap(panMap(pan.map, event.clientX - pan.x, event.clientY - pan.y))
+  manuscriptOffset = { x: pan.offset.x + event.clientX - pan.x, y: pan.offset.y + event.clientY - pan.y }
+  positionManuscript()
 })
 function stopPanning(event) {
   if (!pan || event.pointerId !== pan.pointerId) return
@@ -773,6 +843,7 @@ function stopPanning(event) {
 }
 viewportElement.addEventListener('pointerup', stopPanning)
 viewportElement.addEventListener('pointercancel', stopPanning)
+viewportElement.addEventListener('lostpointercapture', stopPanning)
 viewportElement.addEventListener('click', event => {
   if (!suppressClick) return
   suppressClick = false
