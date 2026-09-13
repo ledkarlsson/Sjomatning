@@ -29,9 +29,9 @@
               <p class="label">BIBLIOTEK</p>
               <h2 id="folderName">Filer</h2>
             </div>
-            <div class="panel-heading-actions"><button id="addLibrary" class="small-button">Lägg till</button><span id="folderCount" class="badge success"></span><button id="toggleLibrary" class="small-button" aria-expanded="true">Dölj</button></div>
+            <div class="panel-heading-actions"><button id="addLibrary" class="small-button">Lägg till</button><span id="folderCount" class="badge success"></span><button id="toggleLibrary" class="small-button" aria-expanded="false">Visa</button></div>
           </div>
-          <div id="libraryContent">
+          <div id="libraryContent" class="hidden">
             <div class="folder-section">
               <h3>Fältmanus</h3>
               <div id="folderPdfList" class="folder-file-list"></div>
@@ -121,7 +121,6 @@
           <button id="startSimulator" class="button wide secondary">Starta simulerad båttur på Roxen</button>
         </details>
 
-        <section class="panel"><p class="label">MÄTNINGAR</p><button id="showTracksPanel" class="text-button">Visa spår synliga i kartan</button></section>
       </aside>
 
       <section class="workspace">

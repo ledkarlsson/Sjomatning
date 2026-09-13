@@ -948,7 +948,6 @@ $('toggleLibrary').addEventListener('click', () => {
   content.classList.toggle('hidden', collapsed)
   $('toggleLibrary').textContent = collapsed ? 'Visa' : 'Dölj'
   $('toggleLibrary').setAttribute('aria-expanded', String(!collapsed))
-  localStorage.setItem('library:collapsed', String(collapsed))
 })
 $('zoomIn').addEventListener('click', () => setScale(state.scale * 1.2))
 $('zoomOut').addEventListener('click', () => setScale(state.scale / 1.2))
@@ -1080,12 +1079,6 @@ window.sjomatning.getAppInfo().then(({ version, buildDate }) => {
   document.title = title
   $('buildInfo').textContent = `v${version} - ${buildDate}`
 })
-
-if (localStorage.getItem('library:collapsed') === 'true') {
-  $('libraryContent').classList.add('hidden')
-  $('toggleLibrary').textContent = 'Visa'
-  $('toggleLibrary').setAttribute('aria-expanded', 'false')
-}
 
 let updateBarTimer
 window.sjomatning.onUpdaterStatus(({ status, detail }) => {
@@ -1471,7 +1464,6 @@ function setTracksPanel(open) {
 }
 $('toggleTracksPanel').onclick = () => state.logs.some(log => log.visible) ? hideAllTracks() : showAllTracks()
 $('openTracksPanel').onclick = () => setTracksPanel(!tracksPanelOpen)
-$('showTracksPanel').onclick = () => setTracksPanel(true)
 $('closeTracksPanel').onclick = () => setTracksPanel(false)
 
 function closeAnnotationEditor() {
