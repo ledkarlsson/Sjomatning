@@ -29,6 +29,8 @@ app.whenReady().then(async () => {
   }
   await win.loadFile(path.resolve('src/index.html'))
   await wait(`document.querySelectorAll('[data-folder-track]').length === 2`)
+  await wait(`document.querySelector('#toggleTracksPanel').textContent === 'Visa spår (2 spår i området · 0 visas · 2 dolt)'`)
+  assert.equal(await run(`document.querySelectorAll('[data-log]:checked').length`), 0, 'library tracks load hidden before any visibility toggle')
   assert.equal(await run(`document.querySelector('#openPdf')`), null)
   await run(`document.querySelector('#showAllTracks').click()`)
   await wait(`document.querySelectorAll('[data-log]:checked').length === 2`)

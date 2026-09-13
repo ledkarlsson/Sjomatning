@@ -304,7 +304,7 @@ function drawManuscripts(context, map) {
     context.beginPath()
     corners.forEach((p,i) => i ? context.lineTo(p.x,p.y) : context.moveTo(p.x,p.y))
     context.closePath()
-    if (!showManuscripts || !file.mapRaster) { context.fillStyle = color + '22'; context.fill() }
+    if (showManuscripts && !file.mapRaster) { context.fillStyle = color + '22'; context.fill() }
     context.strokeStyle = color; context.lineWidth = 2; context.stroke()
     context.font = '12px sans-serif'
     const labelX = Math.max(4, Math.min(map.width - 160, corners[0].x))
@@ -449,13 +449,16 @@ async function addLibraryFiles(files, folders = [], quiet = false) {
       try {
         const parsed = parseTrackFile(bytes, file.originalName || file.name)
         parsed.name = file.name
-        state.library.tracks.push({ ...file, parsed, size: bytes.byteLength, loaded: state.logs.some(log => log.sourceId === file.id) })
+        const track = { ...file, parsed, size: bytes.byteLength, loaded: false }
+        state.library.tracks.push(track)
+        await loadFolderTrack(track)
       } catch (error) {
         state.library.tracks.push({ ...file, parsed: null, size: bytes.byteLength, error: error.message, loaded: false })
       }
     }
   }
   renderFolder()
+  renderLogs()
   scheduleMapDraw()
   if (duplicates && !quiet) toast(`${duplicates} identisk${duplicates === 1 ? ' fil' : 'a filer'} hoppades över.`)
 }
@@ -560,19 +563,23 @@ async function deleteLibraryFile(type, index) {
   } catch (error) { toast(`Kunde inte ta bort filen: ${error.message}`) }
 }
 
-async function toggleFolderTrack(index) {
-  const file = state.library.tracks[index]
+async function loadFolderTrack(file) {
   if (!file.parsed) return
   const existing = state.logs.find(log => log.sourceId === file.id)
-  if (existing) existing.visible = !existing.visible
-  else {
-    const parsed = { ...structuredClone(file.parsed), color: colors[state.logs.length % colors.length], visible: true, folderKey: file.path, sourceId: file.id }
-    parsed.original = structuredClone(file.parsed)
-    state.logs.push(parsed)
-    file.loaded = true
-    if (file.edits) Object.assign(parsed, structuredClone(file.edits))
-    else await applyAutomaticWaterLevel(parsed)
-  }
+  if (existing) { file.loaded = true; return existing }
+  const parsed = { ...structuredClone(file.parsed), color: colors[state.logs.length % colors.length], visible: false, folderKey: file.path, sourceId: file.id }
+  parsed.original = structuredClone(file.parsed)
+  state.logs.push(parsed)
+  file.loaded = true
+  if (file.edits) Object.assign(parsed, structuredClone(file.edits))
+  else await applyAutomaticWaterLevel(parsed)
+  return parsed
+}
+
+async function toggleFolderTrack(index) {
+  const log = await loadFolderTrack(state.library.tracks[index])
+  if (!log) return
+  log.visible = !log.visible
   renderFolder(); renderLogs(); drawOverlay()
 }
 
@@ -1250,8 +1257,8 @@ async function finishMeasurement(live) {
     await live.write?.catch(error => toast(`Kunde inte skriva mätdata: ${error.message}`))
     const file = await window.sjomatning.stopLiveSession(session.id)
     if (file?.id && live.log.points.length) {
-      await addLibraryFiles([file], [], true)
       live.log.sourceId = file.id
+      await addLibraryFiles([file], [], true)
       live.log.original = structuredClone(state.library.tracks.find(item => item.id === file.id).parsed)
       saveTrack(live.log)
     }
