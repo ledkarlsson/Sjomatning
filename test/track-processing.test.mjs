@@ -45,3 +45,20 @@ test('jämför närliggande punkter med korrigering och utesluter avlägsna punk
   assert.ok(pairs[0].distance < 1)
   assert.deepEqual(compareTrackPoints({ points: [] }, track), [])
 })
+
+
+test('import and export preserve each textual coordinate precision', async () => {
+  const { parseTextTrack, parseTrcTrack } = await import('../src/track-parser.mjs')
+  const { formatCoordinate } = await import('../src/track-processing.mjs')
+  const track = parseTextTrack('2026-09-13,12:00:00,58.500,15.12,0,2', 'track.txt')
+  assert.equal(formatCoordinate(track.points[0], 'lat'), '58.500')
+  assert.ok(exportCsv([track]).includes(';58.500;15.12;'))
+  assert.ok(exportWaypoints([track]).includes(',58.500,15.12,'))
+  track.points[0].lat = 58.5012
+  assert.equal(formatCoordinate(track.points[0], 'lat'), '58.5012')
+  const bytes = new Uint8Array(30)
+  new DataView(bytes.buffer).setInt32(0, 3500001, true)
+  const point = parseTrcTrack(bytes, 'track.trc').points[0]
+  assert.equal(formatCoordinate(point, 'lat'), '58.33335')
+  assert.equal(point.lat, 3500001 / 60000)
+})

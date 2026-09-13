@@ -60,7 +60,7 @@ export function chartGeometry(refs) {
   const lat=fit('lat'),lon=fit('lon')
   return (x,y) => { const t=terms(x,y); return {lat:t.reduce((s,v,i)=>s+v*lat[i],0),lon:t.reduce((s,v,i)=>s+v*lon[i],0)} }
 }
-export async function rasterPixels(chart, maxSide = 3000) {
+export async function rasterPixels(chart, maxSide = Infinity) {
   const { bytes, width, height } = chart
   const scale = Math.min(1, maxSide / Math.max(width,height)), outWidth = Math.max(1,Math.round(width*scale)), outHeight = Math.max(1,Math.round(height*scale))
   const rgba = new Uint8ClampedArray(outWidth*outHeight*4)

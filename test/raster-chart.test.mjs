@@ -39,3 +39,13 @@ test('WCI deflate rows decode and reject oversized output',async()=>{
  assert.equal((await rasterPixels(make(4))).rgba.length,32)
  await assert.rejects(()=>rasterPixels(make(5)),/lång/)
 })
+
+
+test('WCI retains original pixels above the former 3000-pixel limit', async () => {
+ const bytes = new Uint8Array(27), view = new DataView(bytes.buffer)
+ view.setUint32(20, 0xc0000000, true); bytes.set([10,20,30],24)
+ const chart = {type:'wci',width:6001,height:1,bytes,paletteStart:24,paletteSize:1}
+ const full = await rasterPixels(chart)
+ assert.equal(full.width,6001); assert.equal(full.rgba.length,6001*4)
+ assert.equal((await rasterPixels(chart,3000)).width,3000)
+})

@@ -3,7 +3,7 @@ import { buildPointIndex, countPoints, viewPoints } from './track-view.mjs'
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
 import { parseTextTrack, parseTrcTrack, parseLowranceTrack } from './track-parser.mjs'
 import { ROXEN_BOUNDS, SWEDEN_BOUNDS, fitBounds, viewportMap, panMap, zoomMap, visibleTiles, geoToMapPixel, mapPixelToGeo } from './web-map.mjs'
-import { compareTrackPoints, adjustedDepth, exportCsv, exportWaypoints, processedPoints, trackDate } from './track-processing.mjs'
+import { compareTrackPoints, adjustedDepth, exportCsv, exportWaypoints, processedPoints, trackDate, formatCoordinate } from './track-processing.mjs'
 import { simulationFrame } from './nmea-simulator.mjs'
 import { parseNmeaSentence } from './nmea-parser.mjs'
 
@@ -703,7 +703,7 @@ async function applyAutomaticWaterLevel(log) {
 function renderLogs() {
   $('logsPanel').classList.toggle('hidden', !tracksPanelOpen)
   const fittingLogs = state.logs.filter(log => (trackFit(log)?.inside || 0) > 0)
-  $('toggleTracksPanel').textContent = `${state.logs.some(log => log.visible) ? 'Dölj' : 'Visa'} spår (${fittingLogs.filter(log => log.visible).length} i bild)`
+  $('toggleTracksPanel').textContent = `${state.logs.some(log => log.visible) ? 'Dölj' : 'Visa'} spår (${fittingLogs.length} i bild)`
   $('toggleTracksPanel').setAttribute('aria-pressed', String(state.logs.some(log => log.visible)))
   $('openTracksPanel').setAttribute('aria-expanded', String(tracksPanelOpen))
   renderTrackLegend()
@@ -870,7 +870,7 @@ overlay.addEventListener('mousemove', event => {
     }
   })
   if (nearest) {
-    $('tooltip').innerHTML = `<strong>${escapeHtml(shortTrackName(nearest.log.name))}</strong><br>${correctedDepth(nearest.log, nearest.point).toFixed(2)} m<br>${escapeHtml([nearest.point.date, nearest.point.time].filter(Boolean).join(' '))}<br>Lat: ${nearest.point.lat.toFixed(6)} · Long: ${nearest.point.lon.toFixed(6)}${Number.isFinite(nearest.point.speed) && nearest.point.speed.toFixed(1) !== '0.0' ? '<br>' + nearest.point.speed.toFixed(1) + ' knop' : ''}`
+    $('tooltip').innerHTML = `<strong>${escapeHtml(shortTrackName(nearest.log.name))}</strong><br>${correctedDepth(nearest.log, nearest.point).toFixed(2)} m<br>${escapeHtml([nearest.point.date, nearest.point.time].filter(Boolean).join(' '))}<br>Lat: ${formatCoordinate(nearest.point, 'lat')} · Long: ${formatCoordinate(nearest.point, 'lon')}${Number.isFinite(nearest.point.speed) && nearest.point.speed.toFixed(1) !== '0.0' ? '<br>' + nearest.point.speed.toFixed(1) + ' knop' : ''}`
     $('tooltip').style.left = `${event.clientX + 14}px`; $('tooltip').style.top = `${event.clientY + 14}px`
     $('tooltip').classList.remove('hidden')
   } else $('tooltip').classList.add('hidden')
@@ -1085,15 +1085,14 @@ async function startCapture() {
   try {
     port = await navigator.serial.requestPort()
     await port.open({ baudRate: Number($('baudRate').value) })
-    const session = await window.sjomatning.startLiveSession({ baudRate: Number($('baudRate').value), depthOffset: Number($('liveDepthOffset').value) || 0 })
-    const log = { name: `Live ${new Date().toLocaleString('sv-SE')}`, date: today(), points: [], warnings: [], color: colors[state.logs.length % colors.length], visible: true, depthAdjustment: 0, pruneDistance: 0, waterLevel: null, correction: null }
-    state.logs.push(log)
-    state.live = { port, session, log, position: null, depth: null, cancelled: false }
-    $('liveBadge').textContent = 'Loggar'; $('liveBadge').className = 'badge success'
-    $('startSimulator').classList.add('hidden'); $('startCapture').classList.add('hidden'); $('stopCapture').classList.remove('hidden')
-    $('livePath').textContent = `Sparas i ${session.folder}`
+    state.live = { port, session: null, log: null, position: null, depth: null, cancelled: false }
+    $('liveBadge').textContent = 'Ansluten'; $('liveBadge').className = 'badge success'
+    $('startSimulator').classList.add('hidden'); $('startCapture').classList.add('hidden')
+    $('startMeasurement').classList.remove('hidden'); $('disconnectCapture').classList.remove('hidden')
+    $('livePath').textContent = 'Ansluten. Starta mätning för att spara data.'
     renderLogs()
-    readSerialStream().catch(error => { console.error(error); toast(`USB-anslutningen avbröts: ${error.message}`); stopCapture() })
+    state.live.readTask = readSerialStream()
+    state.live.readTask.catch(error => { console.error(error); toast(`USB-anslutningen avbröts: ${error.message}`); stopCapture() })
   } catch (error) {
     if (port?.readable || port?.writable) await port.close().catch(() => {})
     if (error.name !== 'NotFoundError') toast(`Kunde inte starta mätningen: ${error.message}`)
@@ -1107,17 +1106,21 @@ async function readSerialStream() {
   const reader = decoder.readable.getReader()
   live.reader = reader
   let buffer = ''
-  while (!live.cancelled) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffer += value
-    const lines = buffer.split(/\r?\n/); buffer = lines.pop() || ''
-    for (const raw of lines) {
-      await receiveNmea(live, raw)
+  try {
+    while (!live.cancelled) {
+      const { value, done } = await reader.read()
+      if (done) { if (!live.cancelled) void stopCapture(); break }
+      buffer += value
+      const lines = buffer.split(/\r?\n/); buffer = lines.pop() || ''
+      for (const raw of lines) {
+        await receiveNmea(live, raw)
+      }
     }
+  } finally {
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
+    await closed
   }
-  reader.releaseLock()
-  await closed
 }
 
 async function receiveNmea(live, raw) {
@@ -1128,12 +1131,12 @@ async function receiveNmea(live, raw) {
   if (parsed?.type === 'gps-invalid') { live.position = null; live.positionAt = 0 }
   if (parsed?.type === 'depth') { live.depth = parsed.depth + (Number($('liveDepthOffset').value) || 0); live.depthAt = Date.now() }
   let point = null
-  if (parsed?.type === 'position' && live.position && Number.isFinite(live.depth) && Date.now() - live.depthAt < 5000) {
+  if (live.session && parsed?.type === 'position' && live.position && Number.isFinite(live.depth) && Date.now() - live.depthAt < 5000) {
     point = { date: live.position.date || today(), time: nmeaTime(live.position.time), lat: live.position.lat, lon: live.position.lon, speed: live.position.speed || 0, depth: live.depth }
     live.log.points.push(point)
     if (live.log.points.length % 5 === 0) { renderLogs(); drawOverlay() }
   }
-  await window.sjomatning.appendLiveData({ id: live.session.id, raw, point })
+  if (live.session) { live.write = window.sjomatning.appendLiveData({ id: live.session.id, raw, point }); await live.write }
   updateMapReadout()
   $('liveReadout').innerHTML = `<span>GPS <strong>${live.position ? `${live.position.lat.toFixed(6)}, ${live.position.lon.toFixed(6)}` : 'väntar…'}</strong></span><span>Djup <strong>${Number.isFinite(live.depth) ? `${live.depth.toFixed(2)} m` : 'väntar…'}</strong></span>`
 }
@@ -1184,9 +1187,40 @@ async function stopCapture() {
   clearTimeout(live.timer)
   await live.pending
   await live.reader?.cancel().catch(() => {})
+  await live.readTask?.catch(() => {})
+  await live.starting?.catch(() => {})
   await live.port?.close().catch(() => {})
+  await finishMeasurement(live)
+  $('startMeasurement').classList.add('hidden'); $('disconnectCapture').classList.add('hidden')
+  $('liveBadge').textContent = 'Frånkopplad'; $('liveBadge').className = 'badge warning'
+  $('simulationSpeed').disabled = false; $('startSimulator').classList.remove('hidden'); $('startCapture').classList.remove('hidden'); $('stopCapture').classList.add('hidden')
+  renderLogs(); drawOverlay(); toast(`Mätningen stoppades. ${live.log?.points.length || 0} punkter sparades i realtid.`)
+}
+
+async function startMeasurement() {
+  const live = state.live
+  if (!live || live.session || live.changing) return
+  live.changing = true
   try {
-    const file = await window.sjomatning.stopLiveSession(live.session.id)
+    live.starting = window.sjomatning.startLiveSession({ baudRate: Number($('baudRate').value), depthOffset: Number($('liveDepthOffset').value) || 0 })
+    live.session = await live.starting
+    live.log = { name: `Live ${new Date().toLocaleString('sv-SE')}`, date: today(), points: [], warnings: [], color: colors[state.logs.length % colors.length], visible: true, depthAdjustment: 0, pruneDistance: 0, waterLevel: null, correction: null }
+    state.logs.push(live.log)
+    if (live.cancelled) return
+    $('liveBadge').textContent = 'Loggar'
+    $('livePath').textContent = `Sparas i ${live.session.folder}`
+    $('startMeasurement').classList.add('hidden'); $('stopCapture').classList.remove('hidden')
+    renderLogs()
+  } catch(error) { toast(error.message) }
+  finally { live.changing = false }
+}
+async function finishMeasurement(live) {
+  const session = live.session
+  if (!session) return
+  live.session = null
+  try {
+    await live.write?.catch(error => toast(`Kunde inte skriva mätdata: ${error.message}`))
+    const file = await window.sjomatning.stopLiveSession(session.id)
     if (file?.id && live.log.points.length) {
       await addLibraryFiles([file], [], true)
       live.log.sourceId = file.id
@@ -1194,13 +1228,25 @@ async function stopCapture() {
       saveTrack(live.log)
     }
   } catch (error) { toast(`Spåret finns i mätmappen men kunde inte läggas i biblioteket: ${error.message}`) }
-  $('liveBadge').textContent = 'Frånkopplad'; $('liveBadge').className = 'badge warning'
-  $('simulationSpeed').disabled = false; $('startSimulator').classList.remove('hidden'); $('startCapture').classList.remove('hidden'); $('stopCapture').classList.add('hidden')
-  renderLogs(); drawOverlay(); toast(`Mätningen stoppades. ${live.log.points.length} punkter sparades i realtid.`)
 }
+async function stopMeasurement() {
+  const live = state.live
+  if (!live || live.changing) return
+  if (live.simulated) return stopCapture()
+  live.changing = true
+  try {
+    await finishMeasurement(live)
+    $('liveBadge').textContent = 'Ansluten'
+    $('livePath').textContent = 'Spåret sparat. Anslutningen är kvar.'
+    $('startMeasurement').classList.remove('hidden'); $('stopCapture').classList.add('hidden')
+    renderLogs(); drawOverlay()
+  } finally { live.changing = false }
+}
+$('startMeasurement').addEventListener('click', startMeasurement)
+$('disconnectCapture').addEventListener('click', () => { if (!state.live?.changing) void stopCapture() })
 
 $('startCapture').addEventListener('click', startCapture)
-$('stopCapture').addEventListener('click', stopCapture)
+$('stopCapture').addEventListener('click', stopMeasurement)
 
 $('startSimulator').addEventListener('click', startSimulator)
 
@@ -1253,7 +1299,7 @@ function showTrackEditor(index, page = 0) {
   $('editorContent').innerHTML = `<h2>${escapeHtml(log.name)}</h2><p>${log.points.length} punkter. ${fitText(log)}. Djup korrigeras till Hydrographicas referensnivå 33,00 m RH00.</p>
     <label>Justera hela spårets djup (m)<input id="tableAdjustment" type="number" step="0.01" value="${log.depthAdjustment || 0}" ${editable ? '' : 'disabled'}></label>
     <p>${editable ? 'Ändra rådjup eller koordinater direkt i tabellen. Originalfilen finns kvar och kan återställas.' : 'Pågående livespår: stoppa mätningen för att spara i biblioteket och redigera punkter.'}</p>
-    <table><thead><tr><th>Punkt / tid</th><th>Latitud</th><th>Longitud</th><th>Rådjup (m)</th><th>Justerat (m)</th><th></th></tr></thead><tbody>${log.points.slice(start, start + 100).map((point, n) => `<tr><td>${start + n + 1}<br>${escapeHtml(point.date)} ${escapeHtml(point.time)}</td>${['lat','lon','depth'].map(field => `<td><input aria-label="${field} punkt ${start + n + 1}" type="number" step="${field === 'depth' ? '0.01' : '0.000001'}" value="${point[field]}" data-point="${start + n}" data-field="${field}" ${editable ? '' : 'disabled'}></td>`).join('')}<td>${correctedDepth(log, point).toFixed(2)}</td><td><button class="small-button" data-remove-point="${start + n}" ${editable ? '' : 'disabled'}>Ta bort</button></td></tr>`).join('')}</tbody></table>
+    <table><thead><tr><th>Punkt / tid</th><th>Latitud</th><th>Longitud</th><th>Rådjup (m)</th><th>Justerat (m)</th><th></th></tr></thead><tbody>${log.points.slice(start, start + 100).map((point, n) => `<tr><td>${start + n + 1}<br>${escapeHtml(point.date)} ${escapeHtml(point.time)}</td>${['lat','lon','depth'].map(field => `<td><input aria-label="${field} punkt ${start + n + 1}" type="number" step="${field === 'depth' ? '0.01' : '0.000001'}" value="${field === 'depth' ? point[field] : formatCoordinate(point, field)}" data-point="${start + n}" data-field="${field}" ${editable ? '' : 'disabled'}></td>`).join('')}<td>${correctedDepth(log, point).toFixed(2)}</td><td><button class="small-button" data-remove-point="${start + n}" ${editable ? '' : 'disabled'}>Ta bort</button></td></tr>`).join('')}</tbody></table>
     <button id="previousPoints" class="small-button" ${page === 0 ? 'disabled' : ''}>Föregående</button> <span>Sida ${page + 1} av ${Math.max(1, Math.ceil(log.points.length / 100))}</span> <button id="nextPoints" class="small-button" ${start + 100 >= log.points.length ? 'disabled' : ''}>Nästa</button>`
   if (!$('editorDialog').open) $('editorDialog').showModal()
   const refresh = () => { saveTrack(log); renderLogs(); drawOverlay(); showTrackEditor(index, Math.min(page, Math.max(0, Math.ceil(log.points.length / 100) - 1))) }

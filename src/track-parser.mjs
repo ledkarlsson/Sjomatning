@@ -28,7 +28,7 @@ export function parseTextTrack(text, name) {
       ;[lat, lon, speed, depth] = cells.slice(2).map(Number)
     } else { warnings.push(index + 1); return }
     if (![lat, lon, speed, depth].every(Number.isFinite)) { warnings.push(index + 1); return }
-    points.push({ date, time, lat, lon, speed, depth })
+    points.push({ date, time, lat, lon, speed, depth, coordinateText: { lat: cells[cells[0] === 'WP' ? 3 : 2], lon: cells[cells[0] === 'WP' ? 4 : 3] } })
   })
   if (!points.length) throw new Error(`${name} innehåller inga giltiga mätpunkter.`)
   return { name, points, warnings, ...metadataFromName(name) }
@@ -46,7 +46,7 @@ export function parseTrcTrack(bytes, name) {
     const lon = view.getInt32(offset + 4, true) / 60000
     const depth = view.getUint16(offset + 28, true) / 10
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) { warnings.push(index + 1); continue }
-    points.push({ date, time: '', lat, lon, speed: 0, depth })
+    points.push({ date, time: '', lat, lon, coordinateDecimals: 5, speed: 0, depth })
   }
   if (!points.length) throw new Error(`${name} innehåller inga giltiga mätpunkter.`)
   return { name, points, warnings, waterLevel, correction }
@@ -79,7 +79,7 @@ export function parseLowranceTrack(bytes, name) {
       const depth = view.getFloat32(offset + (sl2 ? 64 : 48), true) * .3048
       const gpsSpeed = view.getFloat32(offset + (sl2 ? 100 : 84), true)
       if ([lat, lon, depth].every(Number.isFinite) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && depth >= 0) {
-        points.push({ date: '', time: '', lat, lon, depth, speed: (flags & 2) && Number.isFinite(gpsSpeed) && gpsSpeed >= 0 ? gpsSpeed : 0, elapsedMs: view.getUint32(offset + (sl2 ? 140 : 124), true), channel })
+        points.push({ date: '', time: '', lat, lon, coordinateDecimals: 5, depth, speed: (flags & 2) && Number.isFinite(gpsSpeed) && gpsSpeed >= 0 ? gpsSpeed : 0, elapsedMs: view.getUint32(offset + (sl2 ? 140 : 124), true), channel })
       } else warnings.push(`Ogiltig mätning vid byte ${offset}`)
     }
     offset += size

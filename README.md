@@ -16,8 +16,9 @@ Anslut en NMEA 0183-enhet via USB (eller en USB–seriell-adapter) och använd p
 
 1. Välj enhetens baudrate, vanligen 4 800, 9 600 eller 38 400 baud.
 2. Ange vid behov givarjustering i meter. Värdet läggs till det inkommande djupet.
-3. Klicka på **Anslut och starta mätning** och välj USB-porten.
-4. Klicka på **Stoppa och spara spåret** när körningen är klar.
+3. Klicka på **Anslut** och välj USB-porten. Position och djup visas utan att mätdata sparas.
+4. Klicka på **Starta mätning**. **Stoppa och spara spåret** avslutar mätningen men behåller anslutningen. Du kan starta ett nytt spår direkt.
+5. Klicka på **Koppla från** för att stänga USB-anslutningen och spara eventuell pågående mätning.
 
 Appen stöder GPS-meningarna GGA/RMC och ekolodsmeningarna DPT/DBT. Under körningen skrivs varje mottagen NMEA-mening omedelbart till `raw.nmea`, medan kompletta GPS- och djupmätningar skrivs till `track.csv`. Filerna ligger i den sökväg som visas i livepanelen. Råströmmen ändras aldrig.
 
@@ -224,8 +225,16 @@ Klicka på **Starta simulerad båttur på Roxen** i den egna kollapsbara panelen
 
 Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) varje sekund genom samma parser och loggning som USB-mätning. Tidsfaktorn accelererar både rörelsen och NMEA-klockan. Klicka **Stoppa och spara spåret** när du är klar. Spåret och mätmappen märks SIMULERAD; råloggen innehåller också `simulated: true`. Djupen är påhittade. Detta är en intern simulator och skapar ingen COM-port för andra program.
 
-## Att göra
+## Att göra – genomfört
 
+- [x] WCI läses med samtliga originalpixlar, utan den tidigare nedskalningen till 3 000 pixlar.
+- [x] Importerade textkoordinater behåller källans decimaler i tabell, punktinformation och export. Binära TRC/Lowrance-koordinater visas med fem decimaler; beräkningar behåller originalvärdena.
+- [x] USB-anslutning och mätstart/mätstopp är separata.
+- [x] Anteckningar använder en sida, fältet Text, textförhandsvisning vid flytt, enkelklick för flytt, dubbelklick för redigering och automatisk lagring.
+- [x] Visa/dölj spår räknar alla spår i kartutsnittet, även dolda.
+
+## Kanske kan tänkas att göra.
+Möjlighet att ändra inställningar på mätningen. T.ex. hur ofta mätningar ska göras.
 
 
 ## Att göra – genomfört 2026-09-13
@@ -240,7 +249,7 @@ Simulatorn genererar checksummekontrollerade NMEA 0183-meningar (RMC och DPT) va
 - [x] Vid jämför synliga spår, visa inte spår som inte har matchande punkter. Sortera listan på antal matchande punkter.
 - [x] I panelen mätningar, där ska det stå: visa spår synliga i kartan
 
-Knappen **Visa hela kartan** återställer Roxenöversikten eller passar in det öppna PDF-manuset. **Visa/dölj spår** visar eller döljer alla spår. **Spårpanel** öppnar och stänger panelen nere till höger; antalet anger visade spår med punkter i kartutsnittet. Panelens kryssrutor styr spårens synlighet. **Visa spår synliga i kartan** i mätpanelen öppnar samma panel. Färglegenden visar synliga spår i utsnittet när **Färg: spår** är valt. Jämförelser sorteras med flest matchningar först. Version och byggdatum hämtas från det aktuella bygget.
+Knappen **Visa hela kartan** återställer Roxenöversikten eller passar in det öppna PDF-manuset. **Visa/dölj spår** visar eller döljer alla spår. **Spårpanel** öppnar och stänger panelen nere till höger; antalet anger alla spår med punkter i kartutsnittet, även dolda. Panelens kryssrutor styr spårens synlighet. **Visa spår synliga i kartan** i mätpanelen öppnar samma panel. Färglegenden visar synliga spår i utsnittet när **Färg: spår** är valt. Jämförelser sorteras med flest matchningar först. Version och byggdatum hämtas från det aktuella bygget.
 
 UI-regressioner körs med `npm run test:map-ui` och `npm run test:library-ui`. De kör den riktiga Electron-renderaren med isolerade testdata och simulerade externa tjänster. Karttestets GeoPDF-prov kräver den lokala filen i `testdata/fältmanus-geodata/`.
 
@@ -253,3 +262,50 @@ Biblioteket kan nu läsa **WCI** och **KAP** som fältmanus, inklusive kalibreri
 Utzoomade spår visas med ett zoomanpassat urval av punkter. Grundaste punkten representerar små kluster; inzoomning visar fler detaljer. Originalpunkter och export påverkas inte.
 
 Se [verifierade formatvarianter och begränsningar](docs/seaclear-kartor.md). Regressionen `npm run test:seaclear-ui` provar de lokala SeaClear-filerna och ett spår med 200 000 punkter.
+
+## Användarutvärdering – 2026-09-13
+
+Manuell genomgång i den körande appen från arbetskopian, med fönstertiteln **Sjömätning v0.1.0 - 2026-09-12**, cirka 1426 × 893 pixlar. Perspektivet var en ny användare som vill hitta ett område och jämföra tidigare mätningar. Biblioteket innehöll redan 30 filer och 22 spår; en tom förstagångsinstallation provades inte. Observationerna gäller detta körda tillstånd, inklusive arbetskopians pågående ändringar.
+
+### Det jag faktiskt provade
+
+Öppnade biblioteket, visade spåren, öppnade spårpanelen, växlade mellan djupfärg och spårfärg, dolde ett spår via legenden och visade det igen via kryssrutan. Öppnade **Jämför synliga spår**, bytte referensspår, läste resultat och metodförklaring samt öppnade en punkttabell från jämförelsen. Använde **Gå till plats** för Granholmen och jämförde igen efter inzoomningen. Stängde dialogen med både knappen och Escape. Inga rådjup, koordinater eller djupjusteringar ändrades. Import, export, kalibrering, simulator och fysisk GPS/ekolodsanslutning ingick inte i denna genomgång.
+
+Det fungerar bra att kartan ger geografisk orientering direkt, att spår kan döljas från legenden och att kryssrutan följer med. Jämförelsen uppdaterades vid byte av referens, var sorterad på antal matchningar och förklarade att positiv skillnad betyder djupare än referensen. Escape fungerade även efter skrollning i dialogen.
+
+### Konkreta jämförelser
+
+Maxavståndet var **10 m** och befintliga vattennivåer/djupjusteringar behölls. Värdena nedan är avlästa resultat, inte ett utlåtande om mätningarnas riktighet.
+
+| Referensspår | Jämfört spår | Matchade punkter | Median djupskillnad |
+| --- | --- | ---: | ---: |
+| `20230909_33.05_Scilla_Granholmen.TRC` | `all_Scilla_Granholmen.txt` | 209 | +0,05 m |
+| `20240519_33.96_Scilla_Mariagrundet.TRC` | `20240519_33.96_Scilla_Mariagrundet.txt` | 217 | 0,00 m |
+| `20240519_33.96_Scilla_Mariagrundet.TRC` | `20240630_33.24 Scilla_Mariagrundet.TRC` | 655 | −0,07 m |
+| `20240519_33.96_Scilla_Mariagrundet.TRC` | `all_Scilla_Mariagrundet.txt` | 715 | +0,56 m |
+
+Som ny användare behöver jag hjälp att förstå varför samlingsfilen skiljer sig med 0,56 m, medan TXT- och TRC-filerna från samma datum ger 0,00 m. Resultatet ensamt visar inte om orsaken är vattennivå, mätutrustning, körväg eller filernas innehåll. Appen bör hjälpa mig att undersöka skillnaden innan jag ändrar ett helt spårs djup.
+
+### Förbättringsförslag och frågor, i prioriterad ordning
+
+**P1 – Gör filerna identifierbara i biblioteket.** Vid **Bibliotek → Visa** saknade de synliga fältmanuskorten namn; jag såg upprepade knappar för **Gå till plats**, **Anteckna**, **Byt namn** och ×. Första kortets plats visade sig vara Granholmen först efter klicket. Visa alltid ett tydligt namn, format och område, med reservnamn om visningsnamnet saknas. **Fråga:** ”Vilket manus öppnar jag, och vilket skulle krysset ta bort?” **Klart när:** rätt manus kan väljas utan provklick.
+
+**P1 – Låt jämförelsens omfattning motsvara vad användaren ser.** Efter **Gå till plats** vid Granholmen stod det **2 i bild**, och spårpanelen visade de två Granholmenspåren. **Jämför synliga spår** tog ändå med flera Mariagrundetspår, bland annat raden med 553 matchningar och −0,08 m mot Granholmenreferensen. Det tyder på att påslagna spår och spår i utsnittet inte avgränsas på samma sätt i dessa vyer. Erbjud ett uttryckligt val mellan **Aktuellt kartutsnitt**, **Alla påslagna spår** och **Valda spår**, och ange även om hela spåret eller bara punkterna i utsnittet jämförs. **Fråga:** ”Varför jämförs Mariagrundet när jag bara ser Granholmen?” **Klart när:** dialogen före resultatet visar omfattning och antal spår, och ett val av två spår ger just den jämförelsen.
+
+**P1 – Skilj överlappande spår visuellt.** I **Färg: spår** hade både `20230909_33.05_Scilla_Granholmen.TRC` och `all_Scilla_Granholmen.txt` samma röda färg i legend och karta. De nästan överlappande körningarna gick därför inte att särskilja utan att slå av ett spår. Ge spåren i en vald jämförelse olika färger och gärna olika linjemönster; markera motsvarande spår när en legendrad fokuseras. **Fråga:** ”Vilken röd linje hör till vilken körning?” **Klart när:** båda spåren kan följas samtidigt utan att döljas.
+
+**P1 – Ge underlag för att tolka djupskillnader innan redigering.** Tabellen visar antal matchningar och median, men ingen matchningsandel eller spridning. Metodtexten längst ned förklarar redan vattenstånds-/djupjusteringar, att jämförelsen sker före gallring och att referenspunkter får återanvändas; flytta denna viktiga information närmare inställningarna. Visa matchade/antal möjliga punkter, andel, spridning och de använda justeringarna. Lägg till **Visa matchningar på kartan** före **Redigera punkter / justering**. **Frågor:** ”Är 655 matchningar mycket av just detta spår? Vad innebär median? Varför 10 meter? Är +0,56 m en genomgående avvikelse eller några olika bottenområden?” **Klart när:** användaren kan granska var och hur väl spåren överlappar utan att ändra mätdata.
+
+**P2 – Behåll vägen tillbaka till jämförelsen.** Från Mariagrundetjämförelsen öppnade jag punkttabellen för körningen 2024-06-30. **Stäng** återförde mig till kartan, inte resultattabellen. Lägg till **Tillbaka till jämförelsen** och bevara referens, avstånd och skrollposition. **Fråga:** ”Hur kommer jag tillbaka till skillnaden jag undersökte?” **Klart när:** granskning av flera resultatrader kan göras utan att jämförelsen öppnas om.
+
+**P2 – Gör långa jämförelser lättare att läsa.** När jag skrollade ned till metodtexten försvann rubriker, vald referens och **Stäng** ur bild. Behåll dialoghuvud och tabellrubriker synliga. **Fråga:** ”Vilken referens och vilken kolumn tittar jag på nu?” **Klart när:** referens, kolumnnamn och stängknapp finns kvar även på sista raden.
+
+**P2 – Samla spårval och förtydliga räknarna.** Det finns **Visa/dölj spår**, **Spårpanel**, **Visa spår synliga i kartan**, legendens **Visa alla/Dölj alla** och individuella kryssrutor. När ett spår doldes ändrades verktygsraden från 22 till 21 i bild, medan paneltexten fortfarande sade att 22 av 22 spår ryms i kartan. Visa exempelvis **22 spår i området · 21 visas · 1 dolt**, och erbjud **Visa endast detta spår** samt val av två spår för jämförelse. Detta konkretiserar den tidigare att-göra-punkten om antal även för dolda spår. **Fråga:** ”Är spåret dolt, utanför kartan eller inte inläst?” **Klart när:** samma begrepp och antal används i karta, panel och jämförelse.
+
+**P2 – Hjälp användaren välja referens och förstå filvarianter.** Referenslistan innehöll långa filnamn, TXT/TRC-par från samma datum och `all_`-filer. Ett Lindönamn innehöll dessutom tecknen `╠ê`; orsaken till teckenfelet fastställdes inte. Visa datum, område, båt, format och punktantal som läsbara uppgifter, med fullständigt originalnamn tillgängligt. Gruppera möjliga varianter av samma körning utan att automatiskt behandla dem som dubbletter. **Frågor:** ”Vilket spår är lämpligt som referens? Är TXT och TRC samma mätning? Innehåller all-filen redan de andra körningarna?” **Klart när:** användaren kan göra ett informerat referensval utan att tolka filnamnskonventioner.
+
+**P2 – Visa djupets beräkning där det granskas.** Spårpanelen har vattennivå, djupjustering och gallringsavstånd; punkttabellen anger referensnivån 33,00 m RH00. Tabellen för 2024-06-30 visade exempelvis rådjup 2,6 och justerat 2.37 m. Visa beräkningen och den faktiskt använda vattennivåns källa/datum intill resultatet, exempelvis rådjup minus vattennivåns avvikelse från referensnivån plus manuell justering. Använd enhetligt decimaltecken. **Frågor:** ”Är detta djup under givaren eller relativt referensnivån? Används dagens vattenstånd eller mätdagens? Påverkar gallringen jämförelsen eller bara visningen/exporten?” **Klart när:** ett korrigerat djup kan förstås utan att leta i flera paneler.
+
+**P3 – Ge en kort vägledning för första arbetsuppgiften.** Startvyn domineras av bibliotek, vattenstånd och GPS-anslutning, medan jämförelsen ligger inne i spårpanelen. Erbjud en kort introduktion: **Hitta område → Välj spår → Jämför → Granska avvikelser**. Lägg en tydlig ingång till att granska befintliga mätningar nära liveflödet. **Frågor:** ”Måste jag ansluta GPS för att använda appen? Behöver jag ett fältmanus för att jämföra? Vad gör jag först?” **Klart när:** en ny användare kan börja med befintliga spår utan instruktioner från någon annan.
+
+Förslagen ovan är en granskningslista, inte genomförda ändringar. Högst nytta först: synliga filnamn, tydlig jämförelseomfattning och särskiljbara spårfärger. Följ upp med ett separat prov från tomt bibliotek och ett komplett import–jämförelse–export-flöde.

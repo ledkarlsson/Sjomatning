@@ -1,3 +1,10 @@
+// Retain source text precision while keeping full coordinates for calculations.
+export function formatCoordinate(point, field) {
+  const original = point.coordinateText?.[field]
+  if (original != null && Number(original) === point[field]) return original
+  return point.coordinateDecimals == null ? String(point[field]) : point[field].toFixed(point.coordinateDecimals)
+}
+
 const EARTH_RADIUS_METERS = 6371008.8
 
 export function distanceMeters(a, b) {
@@ -56,7 +63,7 @@ export function exportCsv(tracks) {
   for (const track of tracks) {
     for (const point of processedPoints(track)) {
       rows.push([
-        csvCell(track.name), point.date, point.time, point.lat.toFixed(7), point.lon.toFixed(7),
+        csvCell(track.name), point.date, point.time, formatCoordinate(point, 'lat'), formatCoordinate(point, 'lon'),
         point.speed.toFixed(1), point.depth.toFixed(2), adjustedDepth(track, point).toFixed(2)
       ].join(';'))
     }
@@ -70,7 +77,7 @@ export function exportWaypoints(tracks) {
     const prefix = String.fromCharCode(65 + (trackIndex % 26))
     processedPoints(track).forEach((point, pointIndex) => {
       const id = `${prefix}${String(pointIndex + 1).padStart(4, '0')}`
-      rows.push(`WP,D,${id} ${adjustedDepth(track, point).toFixed(2)},${point.lat.toFixed(7)},${point.lon.toFixed(7)},,,Ekolod:${point.depth.toFixed(2)}`)
+      rows.push(`WP,D,${id} ${adjustedDepth(track, point).toFixed(2)},${formatCoordinate(point, 'lat')},${formatCoordinate(point, 'lon')},,,Ekolod:${point.depth.toFixed(2)}`)
     })
   })
   return `${rows.join('\r\n')}\r\n`
