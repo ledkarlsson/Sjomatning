@@ -41,10 +41,10 @@ jobs:
       - name: Kontrollera appens arkitekturer och signatur
         run: |
           APP="out/mac-universal/Sjömätning.app"
-          lipo -verify_arch x86_64 arm64 "$APP/Contents/MacOS/Sjömätning"
+          lipo "$APP/Contents/MacOS/Sjömätning" -verify_arch x86_64 arm64
           CANVAS="$APP/Contents/Resources/app.asar.unpacked/node_modules/@napi-rs"
-          lipo -verify_arch x86_64 "$CANVAS/canvas-darwin-x64/skia.darwin-x64.node"
-          lipo -verify_arch arm64 "$CANVAS/canvas-darwin-arm64/skia.darwin-arm64.node"
+          lipo "$CANVAS/canvas-darwin-x64/skia.darwin-x64.node" -verify_arch x86_64
+          lipo "$CANVAS/canvas-darwin-arm64/skia.darwin-arm64.node" -verify_arch arm64
           codesign --verify --deep --strict --verbose=2 "$APP"
       - name: Spara byggartefakter
         uses: actions/upload-artifact@v4
