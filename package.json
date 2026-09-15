@@ -65,6 +65,7 @@
         }
       ],
       "artifactName": "Sjomatning-${version}-mac-${arch}.${ext}",
+      "x64ArchFiles": "Contents/Resources/app.asar.unpacked/node_modules/@napi-rs/canvas-darwin-{arm64,x64}/skia.darwin-*.node",
       "identity": "-",
       "hardenedRuntime": false,
       "notarize": false
