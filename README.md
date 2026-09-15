@@ -64,15 +64,15 @@ npm run make
 
 Windowsinstallationen, blockmap och `latest.yml` hamnar i `out/`. Riktade Electron-tester finns som `npm run test:<område>-ui`, där område är `navigation`, `annotations`, `feedback`, `library`, `seaclear` eller `map`. Vissa kräver lokala provfiler i `testdata/`.
 
-[Windowsbygge](.github/workflows/windows.yml) kör tester, syntaxkontroll och bygge vid push till `main`, pull requests mot `main` och manuell körning. Endast push till `main` publicerar en GitHub Release. Versionen sätts automatiskt till `0.2.<körningsnummer>` och byggdatum till dagens UTC-datum; ingen manuell version eller tagg behövs.
+[Windows- och Macbygge](.github/workflows/windows.yml) kör tester, syntaxkontroll och bygge vid push till `main`, pull requests mot `main` och manuell körning. Endast push till `main` publicerar en GitHub Release, efter att både Windows- och Macbygget har lyckats. Båda plattformarna får samma version och byggdatum; releasen innehåller Windows-installation, DMG och ZIP för Mac. Versionen sätts automatiskt till `0.2.<körningsnummer>` och byggdatum till dagens UTC-datum; ingen manuell version eller tagg behövs.
 
 Installerade appar söker uppdateringar vid start och var tionde minut, hämtar dem i bakgrunden och erbjuder omstart för installation. Tokenfri uppdatering kräver ett publikt GitHub-repo. Windowsbyggena är ännu inte kodsignerade och kan därför ge en SmartScreen-varning.
 
 ### macOS
 
-[Macbygge](.github/workflows/macos.yml) kör tester, syntaxkontroll och paketering på macOS vid push till `main`, pull requests mot `main` och manuell körning. Bygget skapar en universell app för både Intel och Apple Silicon och kontrollerar båda arkitekturerna samt appens ad hoc-signatur.
+[Macbygge](.github/workflows/macos.yml) kör tester, syntaxkontroll och paketering på macOS som del av det gemensamma Windows- och Macbygget vid push till `main` och pull requests mot `main`. Det kan också köras separat manuellt. Bygget skapar en universell app för både Intel och Apple Silicon och kontrollerar båda arkitekturerna samt appens ad hoc-signatur.
 
-Hämta filerna via **GitHub → Actions → Macbygge → välj en lyckad körning → Artifacts**. Packa upp artefakten, öppna DMG-filen och dra Sjömätning till Applications. En ZIP med appen ingår också. Macbygget publicerar ingen GitHub Release.
+Hämta DMG-filen från **GitHub → Releases → senaste versionen → Assets**. Testbyggen finns även via **GitHub → Actions → välj en lyckad körning → Artifacts**. Packa upp artefakten, öppna DMG-filen och dra Sjömätning till Applications. En ZIP med appen ingår också. Det gemensamma byggflödet publicerar Mac-filerna tillsammans med Windows-filerna. Separata manuella Macbyggen sparar bara artefakter.
 
 Bygg lokalt på en Mac med `npm ci` och `npm run make:mac`. Filerna `Sjomatning-<version>-mac-universal.dmg` och `.zip` hamnar i `out/`.
 
