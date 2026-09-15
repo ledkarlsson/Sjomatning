@@ -24,6 +24,18 @@ jobs:
           cache: npm
       - name: Installera beroenden
         run: npm ci
+      - name: Installera Canvas för båda Mac-arkitekturerna
+        run: |
+          node <<'NODE'
+          const { execFileSync } = require('node:child_process')
+          const lock = require('./package-lock.json')
+          const packages = ['x64', 'arm64'].map(arch => {
+            const name = `@napi-rs/canvas-darwin-${arch}`
+            return `${name}@${lock.packages[`node_modules/${name}`].version}`
+          })
+          // npm otherwise installs only the runner's native architecture.
+          execFileSync('npm', ['install', '--no-save', '--package-lock=false', '--force', ...packages], { stdio: 'inherit' })
+          NODE
       - name: Sätt byggdatum
         run: |
           node <<'NODE'
