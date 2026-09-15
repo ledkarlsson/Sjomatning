@@ -68,6 +68,16 @@ Windowsinstallationen, blockmap och `latest.yml` hamnar i `out/`. Riktade Electr
 
 Installerade appar söker uppdateringar vid start och var tionde minut, hämtar dem i bakgrunden och erbjuder omstart för installation. Tokenfri uppdatering kräver ett publikt GitHub-repo. Windowsbyggena är ännu inte kodsignerade och kan därför ge en SmartScreen-varning.
 
+### macOS
+
+[Macbygge](.github/workflows/macos.yml) kör tester, syntaxkontroll och paketering på macOS vid push till `main`, pull requests mot `main` och manuell körning. Bygget skapar en universell app för både Intel och Apple Silicon och kontrollerar båda arkitekturerna samt appens ad hoc-signatur.
+
+Hämta filerna via **GitHub → Actions → Macbygge → välj en lyckad körning → Artifacts**. Packa upp artefakten, öppna DMG-filen och dra Sjömätning till Applications. En ZIP med appen ingår också. Macbygget publicerar ingen GitHub Release.
+
+Bygg lokalt på en Mac med `npm ci` och `npm run make:mac`. Filerna `Sjomatning-<version>-mac-universal.dmg` och `.zip` hamnar i `out/`.
+
+Detta är testbyggen med ad hoc-signatur, utan Apple Developer-certifikat eller notarisation. macOS kan därför blockera appen vid öppning. Apple-signering och notarisation återstår för smidig distribution; automatisk Mac-uppdatering ingår inte i detta byggflöde. Programmet, särskilt fysisk GPS/ekolodsanslutning, behöver verifieras på en Mac.
+
 ## Mer dokumentation
 
 - [SeaClear-kartor: formatstöd och begränsningar](docs/seaclear-kartor.md)

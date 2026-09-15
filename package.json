@@ -12,6 +12,7 @@
     "start": "electron .",
     "package": "electron-builder --dir",
     "make": "electron-builder --win nsis --publish never",
+    "make:mac": "electron-builder --mac --publish never",
     "test": "node --test",
     "test:navigation-ui": "electron scripts/navigation-ui-regression.cjs",
     "test:annotations-ui": "electron scripts/annotations-ui-regression.cjs",
@@ -51,6 +52,22 @@
         }
       ],
       "artifactName": "Sjomatning-${version}-Setup.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        },
+        {
+          "target": "zip",
+          "arch": ["universal"]
+        }
+      ],
+      "artifactName": "Sjomatning-${version}-mac-${arch}.${ext}",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "notarize": false
     },
     "nsis": {
       "oneClick": false,

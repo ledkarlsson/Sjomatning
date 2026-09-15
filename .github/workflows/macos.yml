@@ -1,0 +1,53 @@
+name: Macbygge
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Hämta källkod
+        uses: actions/checkout@v4
+      - name: Installera Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Installera beroenden
+        run: npm ci
+      - name: Sätt byggdatum
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+          pkg.buildDate = new Date().toISOString().slice(0, 10)
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
+          NODE
+      - name: Testa
+        run: npm test
+      - name: Kontrollera JavaScript
+        run: npm run lint
+      - name: Bygg för Intel och Apple Silicon
+        run: npm run make:mac
+      - name: Kontrollera appens arkitekturer och signatur
+        run: |
+          APP="out/mac-universal/Sjömätning.app"
+          lipo -verify_arch x86_64 arm64 "$APP/Contents/MacOS/Sjömätning"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+      - name: Spara byggartefakter
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sjomatning-macOS-universal-${{ github.run_number }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            out/*.dmg
+            out/*.zip
