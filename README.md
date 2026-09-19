@@ -49,6 +49,10 @@ På längre sikt finns aktiv ruttnavigation, loggbok, flera instrumentanslutning
 
 ## Utveckling och bygge
 
+### Webbplats
+
+Webbversion med Cloudflare-lagring, personliga åtkomstnycklar och manuell spårplanering finns i `web/`. Se [webbdokumentationen](web/README.md) för behörigheter, lokal körning och driftsättning. Starta lokalt med `npm run web:dev` efter databasinitiering.
+
 Krav: Node.js 22 eller senare.
 
 ```powershell

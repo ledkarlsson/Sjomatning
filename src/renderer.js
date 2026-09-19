@@ -82,6 +82,7 @@ function saveCalibration() {
     nx: point.x / state.width, ny: point.y / state.height, lat: point.lat, lon: point.lon
   }))
   localStorage.setItem(`calibration:${state.pdfKey}`, JSON.stringify(points))
+  if (window.sjomatning.saveCalibration) void window.sjomatning.saveCalibration(`calibration:${state.pdfKey}`, points).catch(error => toast(error.message))
 }
 
 function restoreCalibration() {
@@ -930,7 +931,10 @@ $('armCalibration').addEventListener('click', () => {
 })
 $('clearCalibration').addEventListener('click', () => {
   state.calibration = []; state.transform = null
-  if (state.pdfKey) localStorage.removeItem(`calibration:${state.pdfKey}`)
+  if (state.pdfKey) {
+    localStorage.removeItem(`calibration:${state.pdfKey}`)
+    if (window.sjomatning.saveCalibration) void window.sjomatning.saveCalibration(`calibration:${state.pdfKey}`, []).catch(error => toast(error.message))
+  }
   updateGeoStatus(); drawOverlay()
 })
 

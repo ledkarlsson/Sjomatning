@@ -4,3 +4,11 @@ tmp/
 testdata/
 *.log
 .DS_Store
+web/dist/
+web/.wrangler/
+.wrangler/
+.dev.vars
+web/.dev.vars
+web/admin-access.txt
+web/wrangler.bootstrap.jsonc
+worker-configuration.d.ts

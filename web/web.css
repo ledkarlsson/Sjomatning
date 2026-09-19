@@ -1,0 +1,19 @@
+#capturePanel,#simulatorPanel,#updateBar { display:none!important }
+.app-header { background: #123e4c; height:76px }
+.app-header h1::after { content:' / Webb'; font-weight:400; color:#a9d8dd }
+.cloud-actions { display:flex; gap:8px; align-items:center }
+.cloud-actions button { padding:8px 12px; border:1px solid #63939b; background:transparent; color:white; border-radius:7px }
+.cloud-status { color:#bee4e7; font-size:12px }
+.login { max-width:420px; width:calc(100% - 32px); padding:32px; border:0; border-radius:14px; box-shadow:0 20px 70px #123e4c55 }
+.login::backdrop { background:#e6eef1ee }
+.login input,.manual-panel input,.manual-panel textarea { width:100%; padding:9px; border:1px solid #bbcdd0; border-radius:6px; font:inherit; margin:5px 0 10px }
+.manual-panel { border-top:4px solid #16798c }
+.manual-panel button { margin:3px 3px 3px 0 }
+.manual-panel textarea { min-height:95px }
+.manual-panel summary { cursor:pointer; margin:12px 0 }
+.manual-panel p { font-size:12px }
+.cloud-downloads { max-height:60vh; overflow:auto }
+.cloud-downloads a { display:block; padding:9px; color:#176b58 }
+.storage-notice { background:#fff4d7; border:1px solid #ddbd6e; font-size:13px; line-height:1.5 }
+.login [role=status] { overflow-wrap:anywhere }
+@media(max-width:760px) { .app-header { padding:12px; height:90px; flex-wrap:wrap } .app-header h1 { font-size:21px } .cloud-status { display:none } .sidebar { max-width:85vw } .layout { height:calc(100% - 90px) } }
