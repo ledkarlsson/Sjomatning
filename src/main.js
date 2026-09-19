@@ -6,6 +6,8 @@ const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel, fetchLatestRoxenLevel } = require('./roxen-level')
 const { exportAnnotatedManuscript } = require('./manuscript-annotations')
 const { createLibraryStore } = require('./library-store')
+const { syncLibrary } = require('./cloud-sync')
+let cloudSyncBusy = false
 const packageMetadata = require('../package.json')
 const { expandChartIndexes: expandBsbIndexes } = require('./bsb-index')
 const expandChartIndexes = files => expandBsbIndexes(files, readSurveyFile)
@@ -136,6 +138,19 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
 ipcMain.handle('library:update', (_event, id, changes) => libraryStore.update(id, changes))
 ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'kap', 'wci', 'bsb', 'txt', 'csv', 'trc', 'sl2', 'sl3'] }] }))
 ipcMain.handle('library:list', () => libraryStore.list())
+ipcMain.handle('library:sync-cloud', async (event, {token, calibrations = {}}) => {
+  if (cloudSyncBusy) throw new Error('En synkning pågår redan.')
+  cloudSyncBusy = true
+  try {
+    const cachePath = path.join(app.getPath('userData'),'cloud-sync.json')
+    let previous = {}
+    try { previous = JSON.parse(await fs.readFile(cachePath,'utf8')) } catch(error) { if(error.code !== 'ENOENT') throw error }
+    return await syncLibrary({ files:await libraryStore.list(), token, calibrations, previous,
+      checkpoint: async cache => { await fs.writeFile(cachePath+'.tmp',JSON.stringify(cache)); await fs.rename(cachePath+'.tmp',cachePath) },
+      progress: data => { if(!event.sender.isDestroyed()) event.sender.send('library:sync-progress',data) }
+    })
+  } finally { cloudSyncBusy = false }
+})
 ipcMain.handle('library:remove', (_event, id) => libraryStore.remove(id))
 
 ipcMain.handle('files:launch-pdf', async () => {

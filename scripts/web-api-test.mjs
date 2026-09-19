@@ -7,6 +7,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({ workers:[{ name:'test', mod
 try {
   const db = await mf.getD1Database('DB');
   for (const sql of (await readFile('web/migrations/0001_library.sql','utf8')).split(';').filter(s => s.trim())) await db.prepare(sql).run();
+  for (const sql of (await readFile('web/migrations/0002_sync.sql','utf8')).split(';').filter(s => s.trim())) await db.prepare(sql).run();
   const call = (path, method='GET', body, cookie, extra={}) => mf.dispatchFetch('https://test.local/api/' + path, { method, headers:{ Origin:'https://test.local', ...(cookie ? {Cookie:cookie} : {}), ...extra }, ...(body === undefined ? {} : {body:typeof body === 'string' ? body : JSON.stringify(body)}) });
   const login = async password => { const response = await call('login','POST',{password}); assert.equal(response.status,200); return response.headers.get('set-cookie').split(';')[0]; };
   assert.equal((await call('files')).status,401);
@@ -34,7 +35,13 @@ try {
   assert.equal((await call('login','POST',{password:a.token})).status,401);
   assert.equal((await call('files/'+file.id,'DELETE',undefined,admin)).status,200);
   assert.equal((await (await call('files','GET',undefined,admin)).json()).length,0);
-  console.log('PASS: inloggning, ägarskap, alla/egna roller, uppladdning, nedladdning, redigering, CSRF, spärrade nycklar och borttagning.');
+  const syncId='a'.repeat(64), uploadSynced=cookie=>call('files?name=sync.csv&syncId='+syncId,'POST',csv,cookie,{'Content-Length':String(Buffer.byteLength(csv))});
+  const synced=await (await uploadSynced(bc)).json();
+  const repeated=await uploadSynced(bc); assert.equal(repeated.status,200); assert.equal((await repeated.json()).id,synced.id);
+  const otherOwner=await (await uploadSynced(admin)).json(); assert.notEqual(otherOwner.id,synced.id);
+  await call('files/'+synced.id,'PATCH',{name:'updated.csv'},bc);
+  const bFiles=await (await call('files','GET',undefined,bc)).json(); assert.equal(bFiles[0].syncId,syncId); assert.equal(bFiles[0].owner,b.id);
+  console.log('PASS: inloggning, ägarskap, roller, filer, CSRF, spärrade nycklar samt idempotent synk isolerad per användare.');
 } finally { await mf.dispose(); }
 
 

@@ -49,9 +49,15 @@ På längre sikt finns aktiv ruttnavigation, loggbok, flera instrumentanslutning
 
 ## Utveckling och bygge
 
-### Webbplats
+### Android GPS
+
+Android-komponenten i `android/` startar GPS när appen öppnas och sparar en punkt per tryck med manuellt djup, automatiskt datum och tid. Punkter visas i en lista och kan ändras eller tas bort. Punkter, ändringar och borttagningar synkas till samma Cloudflare-bibliotek med en personlig åtkomstnyckel. Se [Android-instruktionerna](android/README.md).
+
+### Webbplats och bibliotekssynk
 
 Webbversion med Cloudflare-lagring, personliga åtkomstnycklar och manuell spårplanering finns i `web/`. Se [webbdokumentationen](web/README.md) för behörigheter, lokal körning och driftsättning. Starta lokalt med `npm run web:dev` efter databasinitiering.
+
+Appens panel **Synka till webben** överför biblioteket med din personliga webbnyckel. Original, spårändringar, anteckningar och kartkalibrering följer med. Synkningen startas manuellt, hoppar över oförändrade filer och raderar inte filer från webben.
 
 Krav: Node.js 22 eller senare.
 

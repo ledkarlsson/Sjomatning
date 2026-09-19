@@ -25,7 +25,7 @@ async function authenticated(request, env) {
   return env.DB.prepare('SELECT id,name,role FROM users WHERE id=? AND active=1').bind(id).first();
 }
 async function tokenHash(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))), b => b.toString(16).padStart(2,'0')).join(''); }
-function record(row) { return { ...JSON.parse(row.metadata), id: row.id, name: row.name, originalName: JSON.parse(row.metadata).originalName || row.name, extension: row.extension, size: row.size, addedAt: row.addedAt }; }
+function record(row) { return { ...JSON.parse(row.metadata), id: row.id, owner:row.owner, name: row.name, originalName: JSON.parse(row.metadata).originalName || row.name, extension: row.extension, size: row.size, addedAt: row.addedAt }; }
 export default {
   async fetch(request, env) {
     const url = new URL(request.url), path = url.pathname;
@@ -81,9 +81,16 @@ export default {
         const size = Number(request.headers.get('Content-Length'));
         if (!allowed.test(name) || name.length > 240 || /[\\/\x00-\x1f]/.test(name)) return json({ error: 'Filformatet stöds inte.' }, 400);
         if (!Number.isInteger(size) || size < 1 || size > 95 * 1024 * 1024) return json({ error: 'Filen måste vara mellan 1 byte och 95 MB.' }, 413);
+        const syncId = url.searchParams.get('syncId');
+        if (syncId !== null && !/^[a-f0-9]{64}$/.test(syncId)) return json({error:'Ogiltigt synk-id.'},400);
+        if (syncId) {
+          const existing = await env.DB.prepare("SELECT * FROM files WHERE owner=? AND json_extract(metadata,'$.syncId')=?").bind(user.id,syncId).first();
+          if (existing) return json(record(existing));
+        }
+        const metadata = JSON.stringify(syncId ? {syncId,originalName:name} : {});
         const id = crypto.randomUUID(), extension = name.slice(name.lastIndexOf('.')).toLowerCase(), addedAt = new Date().toISOString();
         await env.FILES.put(id, request.body, { httpMetadata: { contentType: 'application/octet-stream' } });
-        try { await env.DB.prepare('INSERT INTO files(id,name,extension,size,addedAt,owner) VALUES(?,?,?,?,?,?)').bind(id, name, extension, size, addedAt,user.id).run(); }
+        try { await env.DB.prepare('INSERT INTO files(id,name,extension,size,addedAt,owner,metadata) VALUES(?,?,?,?,?,?,?)').bind(id, name, extension, size, addedAt,user.id,metadata).run(); }
         catch (error) { await env.FILES.delete(id); throw error; }
         return json({ id, name, originalName: name, extension, size, addedAt }, 201);
       }

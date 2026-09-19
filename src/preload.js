@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('sjomatning', {
   openFolder: () => ipcRenderer.invoke('files:open-folder'),
   scanDroppedEntries: files => ipcRenderer.invoke('files:scan-paths', files.map(file => webUtils.getPathForFile(file))),
   listLibrary: () => ipcRenderer.invoke('library:list'),
+  syncCloudLibrary: options => ipcRenderer.invoke('library:sync-cloud', options),
+  onCloudSyncProgress: callback => ipcRenderer.on('library:sync-progress', (_event, data) => callback(data)),
   removeLibraryFile: id => ipcRenderer.invoke('library:remove', id),
   launchPdf: () => ipcRenderer.invoke('files:launch-pdf'),
   getRoxenWaterLevel: date => ipcRenderer.invoke('roxen:water-level', date),

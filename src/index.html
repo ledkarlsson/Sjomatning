@@ -22,6 +22,14 @@
 
     <main class="layout">
       <aside class="sidebar" id="sidebar"><section class="panel"><h2>Granska befintliga mätningar</h2><p>Hitta område → Välj spår → Jämför → Granska avvikelser.</p><p>Lägg till spår i biblioteket och välj område på kartan. GPS och fältmanus behövs inte.</p><button id="reviewMeasurements" class="button">Välj spår och jämför</button></section>
+        <section class="panel hidden" id="cloudSyncPanel">
+          <h2>Synka till webben</h2>
+          <p>Ladda upp bibliotekets original, spårändringar, anteckningar och kartkalibrering. Lokala ändringar uppdaterar din webbkopia. Filer tas inte bort från webben.</p>
+          <label>Personlig åtkomstnyckel<input id="cloudSyncToken" type="password" autocomplete="off" placeholder="Samma nyckel som på webbplatsen"></label>
+          <p class="muted">Nyckeln sparas inte. Behörigheten Egna spår synkar bara spår.</p>
+          <button id="syncCloudLibrary" class="button wide">Synka biblioteket nu</button>
+          <p id="cloudSyncStatus" role="status" aria-live="polite"></p>
+        </section>
         <section class="panel" id="folderPanel">
           <div class="panel-help"><button type="button" class="help-button" aria-label="Hjälp" aria-describedby="folderPanelHelp">?</button><span id="folderPanelHelp" class="help-text" role="tooltip">Lägg till PDF-, WCI-, KAP-/BSB- och spårfiler, eller dra filer och mappar direkt hit. Välj Visa för spår och Gå till plats för fältmanus.</span></div>
           <div class="panel-heading">

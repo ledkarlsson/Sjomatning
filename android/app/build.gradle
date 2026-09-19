@@ -1,0 +1,32 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'se.sjomatning.mobile'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+    defaultConfig { applicationId 'se.sjomatning.mobile'; minSdk 26; targetSdk 35; versionCode 7; versionName '0.1.6' }
+    sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/mapAssets')
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    testOptions {
+        unitTests.includeAndroidResources = true
+        // Desktop JDK restricts Origin; Android's HTTP implementation permits it.
+        unitTests.all { systemProperty 'sun.net.http.allowRestrictedHeaders', 'true' }
+    }
+}
+dependencies { testImplementation 'junit:junit:4.13.2'; testImplementation 'org.robolectric:robolectric:4.14.1' }
+tasks.register('copyMapModule', Copy) {
+    from rootProject.file('../src/web-map.mjs')
+    from rootProject.file('../src/raster-chart.mjs')
+    from(rootProject.file('../node_modules/pdfjs-dist/legacy/build')) { include 'pdf.mjs', 'pdf.worker.mjs' }
+    into layout.buildDirectory.dir('generated/mapAssets')
+}
+tasks.register('copyGeoHelpers') {
+    inputs.file rootProject.file('../src/renderer.js')
+    outputs.file layout.buildDirectory.file('generated/mapAssets/geo-reference.mjs')
+    doLast {
+        def source=rootProject.file('../src/renderer.js').getText('UTF-8')
+        def helpers=source.substring(source.indexOf('function parseGeoPdf('),source.indexOf('function saveCalibration('))+source.substring(source.indexOf('function solve3('),source.indexOf('function calibrationTransform('))
+        def output=layout.buildDirectory.file('generated/mapAssets/geo-reference.mjs').get().asFile
+        output.parentFile.mkdirs();output.setText(helpers+'\nexport {parseGeoPdf,affineFit};\n','UTF-8')
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'copyMapModule', 'copyGeoHelpers' }

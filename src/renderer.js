@@ -26,6 +26,26 @@ function trackLabel(log) {
 }
 const state = { pdf: null, pdfKey: null, activePdfId: null, page: null, map: null, width: 0, height: 0, scale: 1, fitScale: 1, calibration: [], transform: null, logs: [], armed: false, live: null, roxenLevel: null, library: { folders: [], pdfs: [], tracks: [] } }
 const $ = id => document.getElementById(id)
+const pendingLibraryWrites = new Set()
+if (window.sjomatning.syncCloudLibrary) {
+  $('cloudSyncPanel').classList.remove('hidden')
+  window.sjomatning.onCloudSyncProgress(({current,total,name}) => { $('cloudSyncStatus').textContent = `${current}/${total} · ${name}` })
+  $('syncCloudLibrary').onclick = async () => {
+    const button = $('syncCloudLibrary'), input = $('cloudSyncToken')
+    if (!input.value.trim()) { $('cloudSyncStatus').textContent = 'Ange din åtkomstnyckel.'; input.focus(); return }
+    button.disabled = true; input.disabled = true
+    $('cloudSyncStatus').textContent = 'Ansluter till webblagringen…'
+    try {
+      if (!await flushAnnotationChanges()) throw new Error('Anteckningarna kunde inte sparas före synkning.')
+      await Promise.all(pendingLibraryWrites)
+      const calibrations = {}
+      for (const key of Object.keys(localStorage)) if(key.startsWith('calibration:')) calibrations[key] = JSON.parse(localStorage.getItem(key))
+      const result = await window.sjomatning.syncCloudLibrary({token:input.value,calibrations})
+      $('cloudSyncStatus').textContent = `${result.uploaded} uppladdade, ${result.updated} uppdaterade, ${result.unchanged} oförändrade, ${result.skipped} överhoppade enligt behörighet. ${result.errors.length ? 'Fel: '+result.errors.map(e=>e.name+': '+e.message).join(' · ') : 'Synkningen är klar. Ladda om webbplatsen för att se filerna.'}`
+    } catch(error) { $('cloudSyncStatus').textContent = `Synkningen misslyckades: ${error.message}` }
+    finally { button.disabled = false; input.disabled = false; input.value = '' }
+  }
+}
 const pdfCanvas = $('pdfCanvas')
 const overlay = $('overlayCanvas')
 const wrap = $('canvasWrap')
@@ -1337,7 +1357,9 @@ function saveTrack(log) {
   const edits = structuredClone({ points: log.points, waterLevel: log.waterLevel, waterLevelSource: log.waterLevelSource, waterLevelDate: log.waterLevelDate, correction: log.correction, depthAdjustment: log.depthAdjustment || 0, pruneDistance: log.pruneDistance || 0 })
   const file = state.library.tracks.find(file => file.id === log.sourceId)
   if (file) file.edits = edits
-  void window.sjomatning.updateLibraryFile(log.sourceId, { edits }).catch(error => toast(`Ändringen kunde inte sparas: ${error.message}`))
+  const write = window.sjomatning.updateLibraryFile(log.sourceId, { edits })
+  pendingLibraryWrites.add(write)
+  void write.then(() => pendingLibraryWrites.delete(write), error => { pendingLibraryWrites.delete(write); toast(`Ändringen kunde inte sparas: ${error.message}`) })
   refreshFits()
 }
 

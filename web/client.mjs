@@ -28,6 +28,7 @@ login.querySelector('label').firstChild.textContent = 'Åtkomstnyckel';
 const header = document.createElement('div'); header.className = 'cloud-actions';
 header.innerHTML = '<span class="cloud-status" role="status">Ansluten till molnbiblioteket</span><button id="downloadOriginals">Hämta original</button><button id="logoutCloud">Logga ut</button>';
 document.querySelector('.app-header').append(header); status = header.querySelector('span');
+const androidLink=document.createElement('a');androidLink.href='/android/';androidLink.textContent='Android GPS';header.prepend(androidLink);
 status.textContent = currentUser.name + ' · ' + (currentUser.role === 'all' ? 'Hela biblioteket' : 'Mina spår');
 document.querySelector('#logoutCloud').onclick = async () => { await api('logout', { method:'POST' }); location.reload(); };
 const settings = await api('settings');

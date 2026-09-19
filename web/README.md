@@ -38,6 +38,14 @@ R2 måste först aktiveras på Cloudflare-kontot. Om en första publicering har 
 
 Administratörens slumpgenererade nyckel sparas lokalt i den git-ignorerade `web/admin-access.txt` och som Cloudflare-hemlighet. Byt den med `wrangler secret put LIBRARY_PASSWORD`; detta ogiltigförklarar alla sessioner men behåller användarnas nycklar. Lägg aldrig hemligheten i Git eller i frontend-kod.
 
-Gränser: 95 MB per originalfil, cirka 1,5 MB per begäran med punktredigeringar. Biblioteket läser filerna vid start; mycket stora samlingar bör få sidindelning och behovsstyrd hämtning innan bred användning. Samtidiga ändringar i samma fil använder sist sparade version. Det finns ingen automatisk synk med desktop-appens lokala bibliotek; importera/exportera filer. USB-insamling och simulator visas endast i desktop-appen.
+Gränser: 95 MB per originalfil, cirka 1,5 MB per begäran med punktredigeringar. Biblioteket läser filerna vid start; mycket stora samlingar bör få sidindelning och behovsstyrd hämtning innan bred användning. Samtidiga ändringar i samma fil använder sist sparade version. USB-insamling och simulator visas endast i desktop-appen.
+
+## Synk från appen
+
+I appen: **Synka till webben → ange personlig åtkomstnyckel → Synka biblioteket nu**. Originalfiler, filnamn, spårändringar, anteckningar och PDF-kalibrering förs över. Nyckeln används endast under synkningen och sparas inte. Nätverksanropen görs i appens huvudprocess till den fasta projektadressen.
+
+Synkningen är enkelriktad och startas manuellt. Oförändrade original identifieras med SHA-256 per användare och återuppladdas inte. Senast lyckade lokala version sparas i appens `cloud-sync.json`: oförändrade lokala data skriver inte över efterföljande webbredigeringar. När lokala data ändras ersätter de motsvarande webbkopia vid nästa synk. Lokala borttagningar raderar inte webbfiler. En fil som har raderats på webben laddas upp igen om den finns kvar i appen. Endast filer som synkats av samma användare återanvänds; tidigare manuellt uppladdade webbfiler kopplas inte automatiskt ihop.
+
+Behörigheten **Egna spår** hoppar över kartor och överför bara spår till användarens eget bibliotek. Synkningen visar antal uppladdade, uppdaterade, oförändrade och överhoppade filer samt fel per fil. Kör igen efter ett nätverksavbrott; redan uppladdade original återanvänds även om föregående försök avbröts före metadata-sparning. Ladda om webbplatsen för att läsa in resultatet.
 
 Verifierat: 50 befintliga tester, separat API-integrationstest med riktiga lokala D1/R2-bindningar (inklusive isolering mellan användare och spärrade sessioner), samt webbläsarprov av inloggning, manuell inmatning, ritning, sparning/omladdning och syntetiska PDF/WCI/KAP-kartor.

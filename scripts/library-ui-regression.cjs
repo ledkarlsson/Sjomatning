@@ -12,6 +12,12 @@ app.whenReady().then(async () => {
   ])
   ipcMain.handle('library:list', () => store.list())
   ipcMain.handle('library:update', (_event, id, changes) => store.update(id, changes))
+  let cloudRequest
+  ipcMain.handle('library:sync-cloud', (event, options) => {
+    cloudRequest=options
+    event.sender.send('library:sync-progress',{current:1,total:2,name:'Båt Å.csv'})
+    return {uploaded:2,updated:0,unchanged:0,skipped:0,errors:[]}
+  })
   ipcMain.handle('files:launch-pdf', () => null)
   ipcMain.handle('app:info', () => ({ version: 'test', buildDate: '2026-09-13' }))
   ipcMain.handle('roxen:water-level', (_event, date) => ({ ok: true, data: { date: date || '2026-09-13', level: 33 } }))
@@ -29,6 +35,15 @@ app.whenReady().then(async () => {
   }
   await win.loadFile(path.resolve('src/index.html'))
   await wait(`document.querySelectorAll('[data-folder-track]').length === 2`)
+  assert.equal(await run(`document.querySelector('#cloudSyncPanel').classList.contains('hidden')`),false)
+  await run(`document.querySelector('#syncCloudLibrary').click()`)
+  assert.match(await run(`document.querySelector('#cloudSyncStatus').textContent`),/Ange din åtkomstnyckel/)
+  await run(`localStorage.setItem('calibration:test.pdf:123',JSON.stringify([{nx:0,ny:0,lat:58,lon:15}])); document.querySelector('#cloudSyncToken').value='test-only'; document.querySelector('#syncCloudLibrary').click()`)
+  await wait(`document.querySelector('#cloudSyncStatus').textContent.includes('Synkningen är klar')`)
+  assert.equal(cloudRequest.token,'test-only')
+  assert.equal(cloudRequest.calibrations['calibration:test.pdf:123'][0].lat,58)
+  assert.equal(await run(`document.querySelector('#cloudSyncToken').value`),'')
+  assert.equal(await run(`document.querySelector('#syncCloudLibrary').disabled`),false)
   await wait(`document.querySelector('#toggleTracksPanel').textContent === 'Visa spår (2 spår i området · 0 visas · 2 dolt)'`)
   assert.equal(await run(`document.querySelectorAll('[data-log]:checked').length`), 0, 'library tracks load hidden before any visibility toggle')
   assert.equal(await run(`document.querySelector('#openPdf')`), null)

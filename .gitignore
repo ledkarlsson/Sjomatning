@@ -12,3 +12,7 @@ web/.dev.vars
 web/admin-access.txt
 web/wrangler.bootstrap.jsonc
 worker-configuration.d.ts
+android/.gradle/
+android/local.properties
+android/**/build/
+web/downloads/

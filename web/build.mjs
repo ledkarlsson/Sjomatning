@@ -12,6 +12,10 @@ html = html.replace('href="styles.css"', 'href="/src/styles.css"><link rel="styl
 html = html.replace('<script type="module" src="renderer.js"></script>', '<script type="module" src="/client.mjs"></script>');
 html = html.replace('<span id="buildInfo"', '<span id="buildInfo"');
 await writeFile(new URL('index.html', output), html);
+await mkdir(new URL('android/', output), {recursive:true});
+await copyFile(new URL('android.html',import.meta.url),new URL('android/index.html',output));
+try { await cp(new URL('downloads/',import.meta.url),new URL('downloads/',output),{recursive:true}); }
+catch(error) { if(error.code !== 'ENOENT') throw error; }
 for (const file of ['client.mjs', 'web.css']) await copyFile(new URL(file, import.meta.url), new URL(file, output));
 await cp(new URL('node_modules/pdfjs-dist/legacy/build/', root), new URL('node_modules/pdfjs-dist/legacy/build/', output), { recursive: true });
 await cp(new URL('node_modules/pdf-lib/dist/pdf-lib.esm.min.js', root), new URL('pdf-lib.mjs', output));
