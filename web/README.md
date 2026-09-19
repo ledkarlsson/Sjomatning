@@ -42,7 +42,7 @@ Gränser: 95 MB per originalfil, cirka 1,5 MB per begäran med punktredigeringar
 
 ## Synk från appen
 
-I appen: **Synka till webben → ange personlig åtkomstnyckel → Synka biblioteket nu**. Originalfiler, filnamn, spårändringar, anteckningar och PDF-kalibrering förs över. Nyckeln används endast under synkningen och sparas inte. Nätverksanropen görs i appens huvudprocess till den fasta projektadressen.
+I appen: **Synka till webben → Synka biblioteket nu**. Om nyckeln saknas eller är ogiltig öppnas en dialog: ange personlig åtkomstnyckel och välj **Spara och synka**. En validerad nyckel sparas krypterad i `cloud-key.bin` med Electron safeStorage (Windows DPAPI) och återanvänds efter omstart. Nyckeln skickas aldrig tillbaka till gränssnittet. Nätverksfel behåller den sparade nyckeln; en spärrad nyckel rensas och dialogen öppnas igen. Originalfiler, filnamn, spårändringar, anteckningar och PDF-kalibrering förs över. Nätverksanropen görs i appens huvudprocess till den fasta projektadressen.
 
 Synkningen är enkelriktad och startas manuellt. Oförändrade original identifieras med SHA-256 per användare och återuppladdas inte. Senast lyckade lokala version sparas i appens `cloud-sync.json`: oförändrade lokala data skriver inte över efterföljande webbredigeringar. När lokala data ändras ersätter de motsvarande webbkopia vid nästa synk. Lokala borttagningar raderar inte webbfiler. En fil som har raderats på webben laddas upp igen om den finns kvar i appen. Endast filer som synkats av samma användare återanvänds; tidigare manuellt uppladdade webbfiler kopplas inte automatiskt ihop.
 

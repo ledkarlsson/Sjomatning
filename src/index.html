@@ -25,8 +25,7 @@
         <section class="panel hidden" id="cloudSyncPanel">
           <h2>Synka till webben</h2>
           <p>Ladda upp bibliotekets original, spårändringar, anteckningar och kartkalibrering. Lokala ändringar uppdaterar din webbkopia. Filer tas inte bort från webben.</p>
-          <label>Personlig åtkomstnyckel<input id="cloudSyncToken" type="password" autocomplete="off" placeholder="Samma nyckel som på webbplatsen"></label>
-          <p class="muted">Nyckeln sparas inte. Behörigheten Egna spår synkar bara spår.</p>
+          <p class="muted">Nyckeln sparas krypterad på datorn. Behörigheten Egna spår synkar bara spår.</p>
           <button id="syncCloudLibrary" class="button wide">Synka biblioteket nu</button>
           <p id="cloudSyncStatus" role="status" aria-live="polite"></p>
         </section>
@@ -191,6 +190,16 @@
       </section>
     </main>
 
+    <dialog id="cloudKeyDialog" aria-labelledby="cloudKeyTitle">
+      <h2 id="cloudKeyTitle">Åtkomstnyckel till webben</h2>
+      <p id="cloudKeyMessage" role="status">Ange din åtkomstnyckel.</p>
+      <form id="cloudKeyForm">
+        <label>Personlig åtkomstnyckel<input id="cloudSyncToken" type="password" autocomplete="off" maxlength="1024" required autofocus placeholder="Samma nyckel som på webbplatsen"></label>
+        <p class="muted">En giltig nyckel sparas krypterad och används nästa gång du synkar.</p>
+        <button type="button" id="cancelCloudKey" class="small-button">Avbryt</button>
+        <button type="submit" class="button">Spara och synka</button>
+      </form>
+    </dialog>
     <dialog id="editorDialog"><form method="dialog"><button class="small-button">Stäng</button></form><div id="editorContent"></div></dialog>
     <dialog id="addDialog"><form method="dialog"><button class="small-button">Stäng</button></form><h2>Lägg till i biblioteket</h2><button id="addFiles" class="button">Välj filer</button><button id="addFolder" class="button">Välj mapp</button></dialog>
     <div id="toast" class="toast hidden"></div>

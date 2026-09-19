@@ -30,20 +30,41 @@ const pendingLibraryWrites = new Set()
 if (window.sjomatning.syncCloudLibrary) {
   $('cloudSyncPanel').classList.remove('hidden')
   window.sjomatning.onCloudSyncProgress(({current,total,name}) => { $('cloudSyncStatus').textContent = `${current}/${total} · ${name}` })
+  const askForCloudKey = message => new Promise(resolve => {
+    const dialog = $('cloudKeyDialog'), input = $('cloudSyncToken')
+    input.value = ''
+    $('cloudKeyMessage').textContent = message
+    let token = null
+    $('cloudKeyForm').onsubmit = event => {
+      event.preventDefault()
+      if (!input.value.trim()) { input.focus(); return }
+      token = input.value.trim()
+      dialog.close()
+    }
+    $('cancelCloudKey').onclick = () => dialog.close()
+    dialog.addEventListener('close', () => { input.value = ''; resolve(token) }, { once: true })
+    dialog.showModal()
+    input.focus()
+  })
   $('syncCloudLibrary').onclick = async () => {
     const button = $('syncCloudLibrary'), input = $('cloudSyncToken')
-    if (!input.value.trim()) { $('cloudSyncStatus').textContent = 'Ange din åtkomstnyckel.'; input.focus(); return }
-    button.disabled = true; input.disabled = true
+    button.disabled = true
     $('cloudSyncStatus').textContent = 'Ansluter till webblagringen…'
     try {
       if (!await flushAnnotationChanges()) throw new Error('Anteckningarna kunde inte sparas före synkning.')
       await Promise.all(pendingLibraryWrites)
       const calibrations = {}
       for (const key of Object.keys(localStorage)) if(key.startsWith('calibration:')) calibrations[key] = JSON.parse(localStorage.getItem(key))
-      const result = await window.sjomatning.syncCloudLibrary({token:input.value,calibrations})
+      let result = await window.sjomatning.syncCloudLibrary({calibrations})
+      while (result.needsToken) {
+        const token = await askForCloudKey(result.message)
+        if (token === null) { $('cloudSyncStatus').textContent = 'Synkningen avbröts.'; return }
+        $('cloudSyncStatus').textContent = 'Kontrollerar nyckeln och synkar…'
+        result = await window.sjomatning.syncCloudLibrary({token,calibrations})
+      }
       $('cloudSyncStatus').textContent = `${result.uploaded} uppladdade, ${result.updated} uppdaterade, ${result.unchanged} oförändrade, ${result.skipped} överhoppade enligt behörighet. ${result.errors.length ? 'Fel: '+result.errors.map(e=>e.name+': '+e.message).join(' · ') : 'Synkningen är klar. Ladda om webbplatsen för att se filerna.'}`
     } catch(error) { $('cloudSyncStatus').textContent = `Synkningen misslyckades: ${error.message}` }
-    finally { button.disabled = false; input.disabled = false; input.value = '' }
+    finally { button.disabled = false; input.value = '' }
   }
 }
 const pdfCanvas = $('pdfCanvas')

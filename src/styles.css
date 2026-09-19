@@ -198,6 +198,9 @@ dialog table { width: 100%; border-collapse: collapse; margin: 16px 0; }
 dialog th, dialog td { padding: 8px; text-align: left; border-bottom: 1px solid #dbe5e0; }
 dialog td input { min-width: 90px; width: 100%; }
 dialog > form { text-align: right; }
+#cloudKeyDialog { width: min(460px, 90vw); }
+#cloudKeyForm { text-align: left; }
+#cloudSyncToken { width: 100%; }
 #folderPanel { border: 2px solid #c8dbd4; }
 .file-actions { flex-wrap: wrap; }
 .instrument-settings { margin: 10px 0; }

@@ -2,8 +2,8 @@ const crypto = require('node:crypto')
 const CLOUD_URL = 'https://sjomatning-web.led-karlsson.workers.dev'
 const hash = value => crypto.createHash('sha256').update(value).digest('hex')
 
-// One-way, explicitly started sync. Credentials live only for this operation.
-async function syncLibrary({ files, token, calibrations = {}, previous = {}, checkpoint = async () => {}, progress = () => {}, fetchImpl = fetch, origin = CLOUD_URL }) {
+// One-way, explicitly started sync. Credential persistence belongs to the main process.
+async function syncLibrary({ files, token, calibrations = {}, previous = {}, checkpoint = async () => {}, onAuthenticated = async () => {}, progress = () => {}, fetchImpl = fetch, origin = CLOUD_URL }) {
   if (typeof token !== 'string' || !token.trim() || token.length > 1024) throw new Error('Ange din åtkomstnyckel.')
   let cookie = ''
   async function request(path, method = 'GET', body) {
@@ -12,6 +12,7 @@ async function syncLibrary({ files, token, calibrations = {}, previous = {}, che
       headers:{ Origin:origin, ...(cookie ? { Cookie:cookie } : {}), ...(body && !Buffer.isBuffer(body) ? {'Content-Type':'application/json'} : {}) },
       ...(body === undefined ? {} : {body:Buffer.isBuffer(body) ? body : JSON.stringify(body)})
     })
+    if (response.status === 401) throw Object.assign(new Error('Åtkomstnyckeln är inte giltig.'), { code: 'AUTH_REQUIRED' })
     const data = await response.json()
     if (!response.ok) throw new Error(data.error || `Serverfel (${response.status}).`)
     if (path === 'login') cookie = response.headers.get('set-cookie')?.split(';')[0] || ''
@@ -19,6 +20,7 @@ async function syncLibrary({ files, token, calibrations = {}, previous = {}, che
   }
   await request('login','POST',{password:token.trim()})
   const user = await request('session')
+  await onAuthenticated()
   if (!user.storageReady) throw new Error('Webblagringen är inte tillgänglig.')
   const remote = await request('files')
   const cache = {...previous}, result = { uploaded:0, updated:0, unchanged:0, skipped:0, errors:[] }
@@ -50,7 +52,10 @@ async function syncLibrary({ files, token, calibrations = {}, previous = {}, che
       cache[cacheKey] = {id:target.id,fingerprint,calibrationKeys:Object.keys(calibration)}
       await checkpoint(cache)
       if (existed) result.updated++
-    } catch (error) { result.errors.push({name:file.name,message:error.message}) }
+    } catch (error) {
+      if (error.code === 'AUTH_REQUIRED') throw error
+      result.errors.push({name:file.name,message:error.message})
+    }
   }
   return {...result, user:user.name}
 }
