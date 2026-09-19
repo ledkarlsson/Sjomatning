@@ -46,7 +46,7 @@ Java 17, SDK Platform 35, Build Tools 35.0.0. Ange SDK-sökväg i `local.propert
 
 
 
-APK finns i `app/build/outputs/apk/debug/app-debug.apk`. Kopiera till `web/downloads/Sjomatning-GPS-0.1.6.apk` från projektroten och kör `npm run web:deploy`. Installationssidan finns på `/android/`. APK:n är debug-signerad för direkt installation; behåll samma signeringsnyckel för uppdateringar.
+APK finns i `app/build/outputs/apk/debug/app-debug.apk`. Kopiera till `web/downloads/Sjomatning-GPS-0.1.7.apk` från projektroten och kör `npm run web:deploy`. Installationssidan finns på `/android/`. APK:n är debug-signerad för direkt installation; behåll samma signeringsnyckel för uppdateringar.
 
 
 
@@ -54,5 +54,5 @@ Testerna omfattar GPS-behörighet, automatisk start, databasuppgradering, punktl
 
 
 
-Sjökartan är inbyggd i appen och använder samma OpenStreetMap-grundkarta och OpenSeaMap-sjömärken som webbappen. Kartbilder behöver internet och använder WebViews normala HTTP-cache. Positionen visas blå när den är aktuell och grå när den är gammal. Kartan kan zoomas och panoreras; Min position återupptar följning. Visa fältmanus hämtar georefererade PDF-, WCI- och KAP-filer från webbbiblioteket med personlig nyckel. Dölj fältmanus tar bort lagret ur kartvyn. Sessionen finns endast i minnet och har samma behörigheter som webbnyckeln. Manus utan geodata kan inte placeras på kartan. Rasterbilder begränsas till 1024 pixlar per sida och totalt 24 miljoner pixlar för telefonens minne. PDF visar första sidan, liksom webbens kartlager.
+Sjökartan är inbyggd i appen och använder samma OpenStreetMap-grundkarta och OpenSeaMap-sjömärken som webbappen. Kartbilder behöver internet och använder WebViews normala HTTP-cache. Positionen visas blå när den är aktuell och grå när den är gammal. Kartan kan zoomas och panoreras; Min position återupptar följning. Visa fältmanus hämtar georefererade PDF-, WCI- och KAP-filer från webbbiblioteket med personlig nyckel. Dölj fältmanus ersätter bilderna med genomskinliga fyrkanter längs manusens geografiska utbredning. Sessionen finns endast i minnet och har samma behörigheter som webbnyckeln. Manus utan geodata kan inte placeras på kartan. Rasterbilder begränsas till 1024 pixlar per sida och totalt 24 miljoner pixlar för telefonens minne. PDF visar första sidan, liksom webbens kartlager.
 

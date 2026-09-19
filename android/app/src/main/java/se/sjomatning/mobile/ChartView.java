@@ -22,7 +22,7 @@ public final class ChartView extends WebView {
         super(context);this.access=access;setContentDescription("Sjökarta med telefonens position");
         getSettings().setJavaScriptEnabled(true);getSettings().setAllowFileAccess(false);getSettings().setAllowContentAccess(false);
         getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        getSettings().setUserAgentString(getSettings().getUserAgentString()+" SjomatningGPS/0.1.6 (+"+CloudSync.ORIGIN+")");
+        getSettings().setUserAgentString(getSettings().getUserAgentString()+" SjomatningGPS/0.1.7 (+"+CloudSync.ORIGIN+")");
         addJavascriptInterface(new Object(){@JavascriptInterface public void openLibrary(){post(()->login(context));}},"ChartAccess");
         setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){

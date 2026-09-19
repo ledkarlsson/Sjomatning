@@ -3,7 +3,7 @@ android {
     namespace 'se.sjomatning.mobile'
     compileSdk 35
     buildToolsVersion '35.0.0'
-    defaultConfig { applicationId 'se.sjomatning.mobile'; minSdk 26; targetSdk 35; versionCode 7; versionName '0.1.6' }
+    defaultConfig { applicationId 'se.sjomatning.mobile'; minSdk 26; targetSdk 35; versionCode 8; versionName '0.1.7' }
     sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/mapAssets')
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     testOptions {

@@ -13,7 +13,7 @@ function draw(){if(!map)return;ctx.clearRect(0,0,map.width,map.height);let loade
   const tiles=visibleTiles(map);
   for(const t of tiles){const base=tile(`https://tile.openstreetmap.org/${t.zoom}/${t.x}/${t.y}.png`);if(base.ready){ctx.drawImage(base.image,t.dx,t.dy,t.size+0.5,t.size+0.5);loaded++;}if(base.error)errors++;}
   for(const t of tiles){const marks=tile(`https://tiles.openseamap.org/seamark/${t.zoom}/${t.x}/${t.y}.png`);if(marks.ready)ctx.drawImage(marks.image,t.dx,t.dy,t.size+0.5,t.size+0.5);}
-  if(showManuscripts&&manuscripts)manuscripts.draw(ctx,map);
+  if(manuscripts)manuscripts.draw(ctx,map,showManuscripts);
   if(fix){const p=geoToMapPixel(map,fix.lat,fix.lon),mpp=156543.03392*Math.cos(fix.lat*Math.PI/180)/2**map.zoom;ctx.beginPath();ctx.arc(p.x,p.y,Math.min(2000,Math.max(3,fix.accuracy/mpp)),0,Math.PI*2);ctx.fillStyle=fix.fresh?'#1676dc25':'#6c778325';ctx.fill();ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fillStyle=fix.fresh?'#1676dc':'#6c7783';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='white';ctx.stroke();}
   status.textContent=libraryMessage || (errors&&!loaded?'Kartan kunde inte hämtas. Kontrollera internet.':!loaded?'Laddar karta…':!fix?'Väntar på position':fix.fresh?'':'Senaste kända position');status.hidden=!status.textContent;
   document.querySelector('#follow').style.background=follow?'#e1f2ff':'white';

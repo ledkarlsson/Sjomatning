@@ -19,16 +19,17 @@ app.whenReady().then(async()=>{
     })()`);
     for(const p of [result.first,result.zoomed,result.moved]){assert.ok(Math.abs(p[0]-result.width/2)<1);assert.ok(Math.abs(p[1]-result.height/2)<1);assert.equal(p[2],8);}
     const layers=await win.webContents.executeJavaScript(`(async()=>{
-      const c=document.querySelector('canvas'),ctx=c.getContext('2d');let drawn=0;const draw=ctx.drawImage.bind(ctx);ctx.drawImage=(image,...rest)=>{if(image instanceof HTMLCanvasElement)drawn++;draw(image,...rest);};
+      const c=document.querySelector('canvas'),ctx=c.getContext('2d');let drawn=0,frames=0;const stroke=ctx.stroke.bind(ctx);ctx.stroke=()=>{if(ctx.strokeStyle==='#9b2868'&&ctx.lineWidth===2)frames++;stroke();};const draw=ctx.drawImage.bind(ctx);ctx.drawImage=(image,...rest)=>{if(image instanceof HTMLCanvasElement)drawn++;draw(image,...rest);};
       const helpers=await import('./geo-reference.mjs');const bytes=new Uint8Array(await (await fetch('/api/files/00000000-0000-0000-0000-000000000001/content')).arrayBuffer());const points=helpers.parseGeoPdf(bytes);window.updatePosition({fix:{lat:points.reduce((s,p)=>s+p.lat,0)/points.length,lon:points.reduce((s,p)=>s+p.lon,0)/points.length,accuracy:5,fresh:true}});
       window.ChartAccess={openLibrary:()=>window.libraryReady()};document.querySelector('#manuscripts').click();
       for(let i=0;i<450&&document.querySelector('#manuscripts').disabled;i++)await new Promise(r=>setTimeout(r,100));
-      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const visible=drawn;document.querySelector('#manuscripts').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));drawn=0;window.updatePosition({fix:null});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const hidden=drawn;
-      document.querySelector('#manuscripts').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return {visible,hidden,status:document.querySelector('#status').textContent};
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const visible=drawn;document.querySelector('#manuscripts').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));drawn=0;window.updatePosition({fix:null});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const hidden=drawn,hiddenFrames=frames;
+      document.querySelector('#manuscripts').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return {visible,hidden,hiddenFrames,status:document.querySelector('#status').textContent};
     })()`);
-    assert.ok(layers.visible>0,JSON.stringify(layers));assert.equal(layers.hidden,0);
+    assert.ok(layers.visible>0,JSON.stringify(layers));assert.equal(layers.hidden,0);assert.ok(layers.hiddenFrames>0,JSON.stringify(layers));
+    await win.webContents.executeJavaScript("document.querySelector('#manuscripts').click();new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
     await new Promise(resolve=>setTimeout(resolve,1000));
     const screenshot=await win.webContents.capturePage();await fs.mkdir('tmp',{recursive:true});await fs.writeFile('tmp/android-map.png',screenshot.toPNG());
-    console.log('GPS following, pinch zoom and GeoPDF show/hide pass. Screenshot: tmp/android-map.png');
+    console.log('GPS following, pinch zoom and GeoPDF show/hide with transparent bounds pass. Screenshot: tmp/android-map.png');
   }finally{win.destroy();server.close();app.quit();}
 }).catch(error=>{console.error(error);app.exit(1);});

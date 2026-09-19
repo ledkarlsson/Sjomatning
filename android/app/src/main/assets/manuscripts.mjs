@@ -28,17 +28,19 @@ export async function loadManuscripts(progress){
       layers.push({canvas,crop,geometry,name:file.name});
     }catch(error){skipped++;}finally{if(task)await task.destroy();}
   }
-  return {message:!layers.length?(files.length?'Inga fältmanus kunde visas. Kontrollera geodata och anslutning.':'Inga fältmanus tillgängliga för din nyckel.'):(skipped?`${layers.length} fältmanus visas · ${skipped} kunde inte läsas eller saknar geodata.`:''),draw(ctx,map){
+  return {message:!layers.length?(files.length?'Inga fältmanus kunde visas. Kontrollera geodata och anslutning.':'Inga fältmanus tillgängliga för din nyckel.'):(skipped?`${layers.length} fältmanus visas · ${skipped} kunde inte läsas eller saknar geodata.`:''),draw(ctx,map,showImages=true){
     for(const layer of layers){
       const project=(x,y)=>{const p=layer.geometry(x,y);return geoToMapPixel(map,p.lat,p.lon);},corners=[[0,0],[1,0],[1,1],[0,1]].map(p=>project(...p));
       if(Math.max(...corners.map(p=>p.x))<0||Math.min(...corners.map(p=>p.x))>map.width||Math.max(...corners.map(p=>p.y))<0||Math.min(...corners.map(p=>p.y))>map.height)continue;
+      if(showImages){
       const steps=12;for(let row=0;row<steps;row++)for(let col=0;col<steps;col++){
         const x=col/steps,y=row/steps,d=1/steps;for(const vertices of [[[x,y],[x+d,y],[x+d,y+d]],[[x,y],[x+d,y+d],[x,y+d]]]){
           const target=vertices.map(p=>project(...p)),fit=affineFit(vertices.map((p,i)=>({x:layer.crop.x+p[0]*layer.crop.width,y:layer.crop.y+p[1]*layer.crop.height,lon:target[i].x,lat:target[i].y})));if(!fit)continue;
           ctx.save();ctx.beginPath();target.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.clip();ctx.transform(fit.lon[0],fit.lat[0],fit.lon[1],fit.lat[1],fit.lon[2],fit.lat[2]);ctx.drawImage(layer.canvas,0,0);ctx.restore();
         }
       }
-      ctx.beginPath();corners.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.strokeStyle='#9b2868';ctx.lineWidth=1;ctx.stroke();
+      }
+      ctx.save();ctx.beginPath();corners.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();if(!showImages){ctx.fillStyle='rgba(155,40,104,0.08)';ctx.fill();}ctx.strokeStyle='#9b2868';ctx.lineWidth=showImages?1:2;ctx.stroke();ctx.restore();
     }
   }};
 }
