@@ -49,3 +49,7 @@ Synkningen är enkelriktad och startas manuellt. Oförändrade original identifi
 Behörigheten **Egna spår** hoppar över kartor och överför bara spår till användarens eget bibliotek. Synkningen visar antal uppladdade, uppdaterade, oförändrade och överhoppade filer samt fel per fil. Kör igen efter ett nätverksavbrott; redan uppladdade original återanvänds även om föregående försök avbröts före metadata-sparning. Ladda om webbplatsen för att läsa in resultatet.
 
 Verifierat: 50 befintliga tester, separat API-integrationstest med riktiga lokala D1/R2-bindningar (inklusive isolering mellan användare och spärrade sessioner), samt webbläsarprov av inloggning, manuell inmatning, ritning, sparning/omladdning och syntetiska PDF/WCI/KAP-kartor.
+
+## Mobilapp (PWA)
+
+Gemensam mobilapp för Android och iPhone på /mobile/: GPS-punkter, lokala fältmanus och uppstartssynkning. Se [mobilappens dokumentation](mobile/README.md).

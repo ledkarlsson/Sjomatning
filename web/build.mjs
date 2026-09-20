@@ -24,3 +24,5 @@ annotations = annotations.replace("const { PDFDocument, StandardFonts, rgb, degr
 annotations = annotations.replace('module.exports = { validateAnnotations, displayPosition, exportAnnotatedManuscript }', 'export { validateAnnotations, displayPosition, exportAnnotatedManuscript }');
 await writeFile(new URL('src/manuscript-annotations.mjs', output), annotations);
 console.log('Webbplats byggd i web/dist');
+
+await import('../scripts/build-mobile.mjs');

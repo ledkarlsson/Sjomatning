@@ -16,6 +16,15 @@ try {
   const makeUser = async (name,role) => { const response = await call('users','POST',{name,role},admin); assert.equal(response.status,201); return response.json(); };
   const a = await makeUser('A','own'), b = await makeUser('B','own'), all = await makeUser('Reviewer','all');
   const ac = await login(a.token), bc = await login(b.token), rc = await login(all.token);
+  // PWA credentials must take precedence over a different tab's cookie.
+  const mobile = (path,token,method='GET',body,cookie=admin) => call(path,method,body,cookie,{Authorization:'Bearer '+token,...(typeof body==='string'?{'Content-Length':String(Buffer.byteLength(body))}:{})});
+  assert.equal((await (await mobile('session',b.token)).json()).id,b.id);
+  assert.equal((await mobile('session','wrong')).status,401);
+  assert.equal((await mobile('users',b.token)).status,403);
+  const mobileUpload=await mobile('files?name=mobile.csv',b.token,'POST','Datum,Tid,Latitud,Longitud,Fart,Djup\n,,58.5,15.5,,4\n');
+  assert.equal(mobileUpload.status,201);const mobileFile=await mobileUpload.json();
+  assert.equal((await mobile('files/'+mobileFile.id+'/content',a.token)).status,404);
+  assert.equal((await mobile('files/'+mobileFile.id,b.token,'DELETE')).status,200);
   const csv = 'Datum,Tid,Latitud,Longitud,Fart,Djup\n,,58.52,15.7,,\n,,58.53,15.71,,4.2';
   const upload = await call('files?name=planned.csv','POST',csv,ac,{'Content-Length':String(Buffer.byteLength(csv))});
   assert.equal(upload.status,201); const file = await upload.json();
@@ -33,6 +42,7 @@ try {
   assert.equal((await call('users/'+a.id,'DELETE',undefined,admin)).status,200);
   assert.equal((await call('files','GET',undefined,ac)).status,401);
   assert.equal((await call('login','POST',{password:a.token})).status,401);
+  assert.equal((await mobile('session',a.token)).status,401);
   assert.equal((await call('files/'+file.id,'DELETE',undefined,admin)).status,200);
   assert.equal((await (await call('files','GET',undefined,admin)).json()).length,0);
   const syncId='a'.repeat(64), uploadSynced=cookie=>call('files?name=sync.csv&syncId='+syncId,'POST',csv,cookie,{'Content-Length':String(Buffer.byteLength(csv))});

@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 public final class ChartView extends WebView {
     static final String HOME="https://appassets.androidplatform.net/chart.html";
     private String payload="{\"fix\":null}",lastPayload="";
-    private final ChartLibrary library=new ChartLibrary();
+    private volatile LibraryStorage storage;
     private final ExecutorService network=Executors.newSingleThreadExecutor();
     private boolean closed=false,asking=false;
     private final AccessSession access;
@@ -22,13 +22,13 @@ public final class ChartView extends WebView {
         super(context);this.access=access;setContentDescription("Sjökarta med telefonens position");
         getSettings().setJavaScriptEnabled(true);getSettings().setAllowFileAccess(false);getSettings().setAllowContentAccess(false);
         getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        getSettings().setUserAgentString(getSettings().getUserAgentString()+" SjomatningGPS/0.1.7 (+"+CloudSync.ORIGIN+")");
+        getSettings().setUserAgentString(getSettings().getUserAgentString()+" SjomatningGPS/0.1.8 (+"+CloudSync.ORIGIN+")");
         addJavascriptInterface(new Object(){@JavascriptInterface public void openLibrary(){post(()->login(context));}},"ChartAccess");
         setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 Uri uri=request.getUrl();String path=uri.getPath();
                 if("https".equals(uri.getScheme())&&"appassets.androidplatform.net".equals(uri.getHost())&&path!=null&&path.startsWith("/api/")&&"GET".equals(request.getMethod())){
-                    try{return new WebResourceResponse(path.endsWith("/content")?"application/octet-stream":"application/json","UTF-8",library.read(path.substring(5)));}catch(Exception e){if(e instanceof AccessSession.InvalidKeyException)post(()->{if(!closed){login(context);}});return new WebResourceResponse("application/json","UTF-8",401,"Unauthorized",java.util.Collections.emptyMap(),new ByteArrayInputStream("{}".getBytes()));}
+                    try{return new WebResourceResponse(path.endsWith("/content")?"application/octet-stream":"application/json","UTF-8",readLocal(path.substring(5)));}catch(Exception e){if(e instanceof AccessSession.InvalidKeyException)post(()->{if(!closed){login(context);}});return new WebResourceResponse("application/json","UTF-8",401,"Unauthorized",java.util.Collections.emptyMap(),new ByteArrayInputStream("{}".getBytes()));}
                 }
                 if("https".equals(uri.getScheme())&&"appassets.androidplatform.net".equals(uri.getHost())&&path!=null&&path.matches("/(chart.html|chart.mjs|web-map.mjs|manuscripts.mjs|geo-reference.mjs|raster-chart.mjs|pdf.mjs|pdf.worker.mjs)")){
                     try{return new WebResourceResponse(path.endsWith("html")?"text/html":"text/javascript","UTF-8",context.getAssets().open(path.substring(1)));}catch(Exception ignored){}
@@ -45,7 +45,16 @@ public final class ChartView extends WebView {
     }
     private void login(Context context){
         if(closed||asking)return;asking=true;
-        access.require(token->network.execute(()->{try{library.login(token);post(()->{asking=false;if(!closed)evaluateJavascript("window.libraryReady()",null);});}catch(Exception e){post(()->{asking=false;if(e instanceof AccessSession.InvalidKeyException){login(context);}else libraryError(e.getMessage());});}}),()->{asking=false;libraryError("Inloggning avbruten");});
+        String saved=context.getSharedPreferences("web_access",Context.MODE_PRIVATE).getString("key",null);
+        if(saved!=null)try{LibraryStorage local=new LibraryStorage(new java.io.File(context.getFilesDir(),"library"),saved);if(local.available()){storage=local;asking=false;evaluateJavascript("window.libraryReady()",null);return;}}catch(Exception ignored){}
+        access.require(token->network.execute(()->{try{syncLibrary(token);post(()->{asking=false;if(!closed)evaluateJavascript("window.libraryReady()",null);});}catch(Exception e){post(()->{asking=false;if(e instanceof AccessSession.InvalidKeyException){login(context);}else libraryError(e.getMessage());});}}),()->{asking=false;libraryError("Inloggning avbruten");});
+    }
+    private java.io.InputStream readLocal(String path)throws Exception {
+        LibraryStorage local=storage;if(local==null)throw new java.io.IOException("Synka biblioteket först.");return local.read(path);
+    }
+    synchronized void syncLibrary(String key)throws Exception {
+        LibraryStorage local=new LibraryStorage(new java.io.File(getContext().getFilesDir(),"library"),key);
+        ChartLibrary remote=new ChartLibrary();try{remote.login(key);local.sync(remote::read);storage=local;}finally{remote.clear();}
     }
     private void libraryError(String message){if(!closed)evaluateJavascript("window.libraryError("+JSONObject.quote(message)+")",null);}
     public void position(Location fix,boolean fresh){
@@ -55,6 +64,6 @@ public final class ChartView extends WebView {
         }catch(JSONException ignored){}
     }
     private void send(){if(payload.equals(lastPayload))return;lastPayload=payload;evaluateJavascript("window.updatePosition && window.updatePosition("+payload+")",null);}
-    @Override public void destroy(){closed=true;library.clear();network.shutdownNow();removeJavascriptInterface("ChartAccess");super.destroy();}
+    @Override public void destroy(){closed=true;network.shutdownNow();removeJavascriptInterface("ChartAccess");super.destroy();}
     @Override public boolean onTouchEvent(MotionEvent event){if(event.getActionMasked()==MotionEvent.ACTION_DOWN)getParent().requestDisallowInterceptTouchEvent(true);if(event.getActionMasked()==MotionEvent.ACTION_UP||event.getActionMasked()==MotionEvent.ACTION_CANCEL)getParent().requestDisallowInterceptTouchEvent(false);return super.onTouchEvent(event);}
 }

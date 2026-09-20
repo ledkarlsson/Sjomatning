@@ -53,6 +53,10 @@ På längre sikt finns aktiv ruttnavigation, loggbok, flera instrumentanslutning
 
 Android-komponenten i `android/` startar GPS när appen öppnas och sparar en punkt per tryck med manuellt djup, automatiskt datum och tid. Punkter visas i en lista och kan ändras eller tas bort. Punkter, ändringar och borttagningar synkas till samma Cloudflare-bibliotek med en personlig åtkomstnyckel. Se [Android-instruktionerna](android/README.md).
 
+### Mobilapp för Android och iPhone (PWA)
+
+Öppna [mobilappen](https://sjomatning-web.led-karlsson.workers.dev/mobile/) och installera den på hemskärmen. Samma app på båda plattformarna: GPS-punkter med manuellt djup, redigering/borttagning, beständig lokal lagring av punkter och fältmanus samt automatisk synkning vid start. Inget Apple Developer-konto behövs. GPS används när appen är öppen; bakgrundsloggning vid skärmlås ingår inte. Se [PWA-dokumentationen](web/mobile/README.md).
+
 ### Webbplats och bibliotekssynk
 
 Webbversion med Cloudflare-lagring, personliga åtkomstnycklar och manuell spårplanering finns i `web/`. Se [webbdokumentationen](web/README.md) för behörigheter, lokal körning och driftsättning. Starta lokalt med `npm run web:dev` efter databasinitiering.

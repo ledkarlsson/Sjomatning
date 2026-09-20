@@ -3,24 +3,28 @@ import {readRasterChart,rasterPixels} from './raster-chart.mjs';
 import {geoToMapPixel} from './web-map.mjs';
 
 async function read(path){const response=await fetch('/api/'+path);if(!response.ok)throw new Error('Kunde inte läsa fältmanusen. Kontrollera nyckeln och anslutningen.');return response;}
-export async function loadManuscripts(progress){
-  const files=(await (await read('files')).json()).filter(f=>/\.(pdf|kap|wci)$/i.test(f.name));
+export async function loadManuscripts(progress,readFile=read,settings={}){
+  const files=(await (await readFile('files')).json()).filter(f=>/\.(pdf|kap|wci)$/i.test(f.name));
   const layers=[];let skipped=0,pixels=0;
   for(const file of files){
     progress('Hämtar '+file.name+'…');let task;
     try{
-      const bytes=new Uint8Array(await (await read('files/'+file.id+'/content')).arrayBuffer());let geometry,canvas,crop;
+      const bytes=new Uint8Array(await (await readFile('files/'+file.id+'/content')).arrayBuffer());let geometry,canvas,crop;
       if(/\.(kap|wci)$/i.test(file.name)){
         const chart=readRasterChart(bytes,file.name);geometry=chart.geometry;const image=await rasterPixels(chart,1024);
         canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;canvas.getContext('2d').putImageData(new ImageData(image.rgba,image.width,image.height),0,0);crop={x:0,y:0,width:canvas.width,height:canvas.height};
       }else{
-        const points=parseGeoPdf(bytes);if(!points){skipped++;continue;}
-        const t=affineFit(points.map(p=>({x:p.nx,y:1-p.ny,lat:p.lat,lon:p.lon})));if(!t)throw new Error('Geodata saknas');
+        const automatic=parseGeoPdf(bytes),saved=settings['calibration:'+(file.originalName||file.name)+':'+bytes.byteLength];
+        const points=automatic||saved;if(!Array.isArray(points)||points.length<2){skipped++;continue;}
+        const normalized=points.map(p=>({x:p.nx,y:automatic?1-p.ny:p.ny,lat:p.lat,lon:p.lon}));
+        let t=affineFit(normalized);
+        if(!t&&normalized.length===2){const [a,b]=normalized,dx=b.x-a.x,dy=b.y-a.y;if(Math.abs(dx)>1e-6&&Math.abs(dy)>1e-6)t={lon:[(b.lon-a.lon)/dx,0,a.lon-a.x*(b.lon-a.lon)/dx],lat:[0,(b.lat-a.lat)/dy,a.lat-a.y*(b.lat-a.lat)/dy]};}
+        if(!t)throw new Error('Geodata saknas');
         geometry=(x,y)=>({lon:t.lon[0]*x+t.lon[1]*y+t.lon[2],lat:t.lat[0]*x+t.lat[1]*y+t.lat[2]});
         const pdfjs=await import('./pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc=new URL('./pdf.worker.mjs',import.meta.url).href;
         const raw=new TextDecoder('latin1').decode(bytes);task=pdfjs.getDocument({data:bytes,useSystemFonts:true});const pdf=await task.promise;progress('Ritar '+file.name+'…');const page=await pdf.getPage(1),original=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(2,1024/Math.max(original.width,original.height))});
         canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;progress('Placerar '+file.name+'…');
-        const match=raw.match(/\/VP\s*\[\s*<<\s*\/BBox\s*\[([^\]]+)\]/),box=match?match[1].trim().split(/\s+/).map(Number):page.view,a=viewport.convertToViewportPoint(box[0],box[1]),b=viewport.convertToViewportPoint(box[2],box[3]);crop={x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),width:Math.abs(b[0]-a[0]),height:Math.abs(b[1]-a[1])};
+        const match=automatic&&raw.match(/\/VP\s*\[\s*<<\s*\/BBox\s*\[([^\]]+)\]/),box=match?match[1].trim().split(/\s+/).map(Number):page.view,a=viewport.convertToViewportPoint(box[0],box[1]),b=viewport.convertToViewportPoint(box[2],box[3]);crop={x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),width:Math.abs(b[0]-a[0]),height:Math.abs(b[1]-a[1])};
       }
       const corners=[[0,0],[1,0],[1,1],[0,1]].map(p=>geometry(...p));
       if(!corners.every(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180)||!crop.width||!crop.height)throw new Error('Ogiltiga geodata');

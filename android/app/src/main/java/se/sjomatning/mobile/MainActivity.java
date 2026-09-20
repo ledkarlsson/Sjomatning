@@ -105,6 +105,8 @@ public final class MainActivity extends Activity {
 
         button(cloud,"Öppna webbkartan",()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(CloudSync.ORIGIN))));
 
+        if(state==null){String saved=getSharedPreferences("web_access",MODE_PRIVATE).getString("key",null);if(saved!=null)syncAuthenticated(saved);}
+
         if(state!=null){permissionRequested=state.getBoolean("permissionRequested",false);name.setText(state.getString("name","Mätning"));depth.setText(state.getString("depth",""));}
 
     }
@@ -158,9 +160,12 @@ public final class MainActivity extends Activity {
 
             String message;
 
-            try(SurveyStore backgroundStore=new SurveyStore(getApplicationContext())){message=new CloudSync().sync(backgroundStore,key,value->handler.post(()->{if(!isDestroyed())result.setText(value);}));}
+            try(SurveyStore backgroundStore=new SurveyStore(getApplicationContext())){
+                message=new CloudSync().sync(backgroundStore,key,value->handler.post(()->{if(!isDestroyed())result.setText(value);}));
+                try{chart.syncLibrary(key);message+="\nFältmanus sparade i telefonen.";}catch(AccessSession.InvalidKeyException e){throw e;}catch(Exception e){message+="\nManus kunde inte synkas: "+e.getMessage()+" Tidigare hämtade manus finns kvar.";}
+            }
 
-            catch(Exception e){if(e instanceof AccessSession.InvalidKeyException){handler.post(()->{syncing=false;if(!isDestroyed()){sync.setEnabled(true);render();access.require(this::syncAuthenticated,()->{});}});return;}message="Synkningen misslyckades: "+e.getMessage()+"\nAlla punkter finns kvar i telefonen. Försök igen.";}
+            catch(Exception e){if(e instanceof AccessSession.InvalidKeyException){AccessSession.invalidate();handler.post(()->{syncing=false;if(!isDestroyed()){sync.setEnabled(true);render();access.require(this::syncAuthenticated,()->{});}});return;}message="Synkningen misslyckades: "+e.getMessage()+"\nAlla punkter finns kvar i telefonen. Försök igen.";}
 
             String finalMessage=message;handler.post(()->{syncing=false;if(!isDestroyed()){sync.setEnabled(true);result.setText(finalMessage);render();}});
 

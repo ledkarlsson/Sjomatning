@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#123e4c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+<title>Sjömätning GPS</title><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icons/apple-touch-icon.png"><link rel="icon" href="./icons/icon-192.png"><link rel="stylesheet" href="./mobile.css">
+<script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<header class="top"><a class="brand" href="./"><img src="./icons/icon-192.png" width="40" height="40" alt=""><span>Sjömätning <b>GPS</b></span></a><button id="install" class="quiet">Installera</button></header>
+<main>
+<div class="intro"><div><p class="eyebrow">DITT ARBETE PÅ SJÖN</p><h1>En punkt i taget.</h1><p class="muted">Position, djup och tid. Sparat i din telefon.</p></div><span id="connection" class="badge">Startar…</span></div>
+<div class="workspace">
+<section class="map-card" aria-label="Sjökarta"><iframe id="chart" title="Sjökarta med din GPS-position" src="./chart"></iframe><div class="position"><span id="gpsStatus" role="status">Söker GPS-position…</span><button id="gps" class="quiet">Aktivera GPS</button></div></section>
+<section class="card capture"><div class="section-title"><span class="step">＋</span><h2>Ny mätpunkt</h2></div><form id="capture">
+<label for="name">Namn på mätningen</label><input id="name" value="Mätning" maxlength="100" autocomplete="off" required>
+<label for="depth">Djup i meter</label><div class="depth-field"><input id="depth" inputmode="decimal" placeholder="4,2" autocomplete="off" required><span>m</span></div>
+<button id="savePoint" class="primary" disabled>Spara punkt här</button><p id="pointFeedback" class="feedback" role="status">Väntar på en noggrann GPS-position.</p></form><p class="hint">Ett tryck sparar en punkt. GPS används när appen är öppen.</p></section>
+</div>
+<section class="card sync-card"><div><p class="eyebrow">DITT BIBLIOTEK</p><h2 id="account">Synka till webben</h2><p id="syncStatus" role="status">Ange din webbnyckel för automatisk synkning.</p><p id="libraryStatus" class="muted">Inga fältmanus hämtade ännu.</p></div><div class="sync-actions"><button id="sync" class="primary">Synka nu</button><button id="access" class="quiet">Webbnyckel</button></div></section>
+<section class="card"><div class="section-title history-title"><div><p class="eyebrow">SPARAT I TELEFONEN</p><h2>Mina punkter <span id="count" class="count">0</span></h2></div><button id="export" class="quiet" disabled>Exportera CSV</button></div><div id="points"><p class="muted">Dina sparade punkter visas här.</p></div><button id="more" class="quiet" hidden>Visa fler</button></section>
+<details class="card help"><summary>Installation och offline</summary><p><strong>iPhone och iPad:</strong> öppna den här sidan i Safari. Välj Dela → Lägg till på hemskärmen → Lägg till. Öppna sedan appen från hemskärmen och ange din webbnyckel där.</p><p><strong>Android:</strong> tryck Installera högst upp, eller välj Installera app / Lägg till på startskärmen i webbläsarens meny.</p><p id="offlineStatus">Förbereder appen för offlineanvändning…</p><p>Punkter sparas även utan internet. Synkning körs vid start och när anslutningen återkommer medan appen är öppen. Sparade fältmanus fungerar offline; bakgrundskartan behöver normalt internet.</p><p>Låt appen vara öppen för aktuella GPS-positioner. Synka eller exportera punkter innan du rensar webbplatsdata. Punkter från den tidigare Android-appen synkas därifrån och blir kvar i webbbiblioteket; de flyttas inte automatiskt till den här telefonlistan.</p><a href="/">Öppna hela webbkartan →</a></details>
+<footer>SJÖMÄTNING · Android &amp; iPhone · <span id="version">PWA</span></footer>
+</main>
+<dialog id="keyDialog"><form id="keyForm"><div class="section-title"><h2>Personlig webbnyckel</h2><button type="button" class="quiet" id="closeKey" aria-label="Stäng">✕</button></div><p>Nyckeln sparas på den här enheten och används för synkning vid uppstart.</p><label for="key">Webbnyckel</label><input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required><p id="keyError" class="error" role="alert"></p><button id="saveKey" class="primary">Spara och synka</button><button id="forgetKey" type="button" class="quiet">Glöm sparad nyckel</button></form></dialog>
+<dialog id="editDialog"><form id="editForm"><h2>Ändra punkt</h2><input id="editId" type="hidden"><label for="editDepth">Djup (meter)</label><input id="editDepth" inputmode="decimal" required><label for="editLat">Latitud</label><input id="editLat" inputmode="text" required><label for="editLon">Longitud</label><input id="editLon" inputmode="text" required><p class="muted">Ursprungligt datum och tid behålls.</p><p id="editError" class="error" role="alert"></p><div class="dialog-actions"><button class="primary">Spara ändring</button><button type="button" id="closeEdit" class="quiet">Avbryt</button></div></form></dialog>
+<dialog id="deleteDialog"><h2>Ta bort punkten?</h2><p>Webbkopior som appen har synkat tas bort nästa gång du synkar med respektive konto.</p><div class="dialog-actions"><button id="confirmDelete" class="danger">Ta bort</button><button id="cancelDelete" class="quiet">Avbryt</button></div></dialog>
+<dialog id="installDialog"><h2>Ha appen nära till hands</h2><p><strong>iPhone:</strong> öppna i Safari och välj Dela → Lägg till på hemskärmen.</p><p><strong>Android:</strong> öppna webbläsarens meny och välj Installera app eller Lägg till på startskärmen.</p><p>Öppna sedan appikonen och synka en gång för att hämta dina fältmanus.</p><button id="closeInstall" class="primary">Klart</button></dialog>
+</body></html>

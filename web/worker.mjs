@@ -18,6 +18,15 @@ async function readJson(request, limit = 65536) {
 }
 async function authenticated(request, env) {
   if (!env.LIBRARY_PASSWORD) return null;
+  // Mobile PWA requests carry their own key so a different browser tab's
+  // session cookie cannot change the owner halfway through a synchronization.
+  const authorization = request.headers.get('Authorization');
+  if (authorization !== null) {
+    const key = authorization.match(/^Bearer (\S{1,1024})$/)?.[1];
+    if (!key) return null;
+    if (equal(await signature(env.LIBRARY_PASSWORD, key), await signature(env.LIBRARY_PASSWORD, env.LIBRARY_PASSWORD))) return {id:'admin',name:'Administratör',role:'all'};
+    return env.DB.prepare('SELECT id,name,role FROM users WHERE tokenHash=? AND active=1').bind(await tokenHash(key)).first();
+  }
   const token = request.headers.get('Cookie')?.match(/(?:^|;\s*)session=([^;]+)/)?.[1] || '';
   const [id, expires, mac] = token.split('.');
   if (!(Number(expires) > Date.now() && Number(expires) < Date.now() + 604801000 && equal(mac || '', await signature(env.LIBRARY_PASSWORD, id + '.' + expires)))) return null;

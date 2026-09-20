@@ -30,4 +30,7 @@ const manuscriptButton=document.querySelector('#manuscripts');
 function label(){manuscriptButton.textContent=showManuscripts?'Dölj fältmanus':'Visa fältmanus';manuscriptButton.setAttribute('aria-pressed',String(showManuscripts));schedule();}
 manuscriptButton.onclick=()=>{libraryMessage='';if(manuscripts){showManuscripts=!showManuscripts;label();return;}manuscriptButton.disabled=true;libraryMessage='Hämtar fältmanus…';schedule();window.ChartAccess.openLibrary();};
 window.libraryError=message=>{libraryMessage=message;manuscriptButton.disabled=false;label();};
-window.libraryReady=async()=>{try{const {loadManuscripts}=await import('./manuscripts.mjs');manuscripts=await loadManuscripts(message=>{libraryMessage=message;schedule();});showManuscripts=true;libraryMessage=manuscripts.message;manuscriptButton.disabled=false;label();}catch(error){window.libraryError(error.message);}};
+let libraryGeneration=0;
+window.resetLibrary=()=>{libraryGeneration++;manuscripts=null;showManuscripts=false;libraryMessage='';manuscriptButton.disabled=false;label();};
+window.refreshLibrary=()=>{if(manuscripts&&showManuscripts)void window.libraryReady();else window.resetLibrary();};
+window.libraryReady=async()=>{const generation=++libraryGeneration;try{const {loadManuscripts}=await import('./manuscripts.mjs');const loaded=await loadManuscripts(message=>{if(generation===libraryGeneration){libraryMessage=message;schedule();}},window.readLibrary,window.librarySettings);if(generation!==libraryGeneration)return;manuscripts=loaded;showManuscripts=true;libraryMessage=manuscripts.message;manuscriptButton.disabled=false;label();}catch(error){if(generation===libraryGeneration)window.libraryError(error.message);}};

@@ -1,0 +1,21 @@
+import {copyFile,cp,mkdir,readFile,writeFile,readdir} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const root=new URL('../',import.meta.url),source=new URL('web/mobile/',root),out=new URL('web/dist/mobile/',root);
+await mkdir(out,{recursive:true});
+for(const name of ['index.html','mobile.css','app.mjs','storage.mjs','sync.mjs','manifest.webmanifest'])await copyFile(new URL(name,source),new URL(name,out));
+await cp(new URL('icons/',source),new URL('icons/',out),{recursive:true});
+for(const name of ['chart.html','chart.mjs','manuscripts.mjs'])await copyFile(new URL('android/app/src/main/assets/'+name,root),new URL(name,out));
+for(const name of ['web-map.mjs','raster-chart.mjs'])await copyFile(new URL('src/'+name,root),new URL(name,out));
+for(const name of ['pdf.mjs','pdf.worker.mjs'])await copyFile(new URL('node_modules/pdfjs-dist/legacy/build/'+name,root),new URL(name,out));
+const renderer=await readFile(new URL('src/renderer.js',root),'utf8');
+const extract=(start,end)=>{const a=renderer.indexOf(start),b=renderer.indexOf(end,a);if(a<0||b<a)throw new Error('Kartans geohjälpare kunde inte byggas.');return renderer.slice(a,b);};
+await writeFile(new URL('geo-reference.mjs',out),extract('function parseGeoPdf(','function saveCalibration(')+extract('function solve3(','function calibrationTransform(')+'\nexport {parseGeoPdf,affineFit};\n');
+const files=(await readdir(out,{recursive:true})).filter(name=>/\.(html|mjs|css|png|webmanifest)$/.test(name)).sort();
+const hash=createHash('sha256');for(const file of files){hash.update(file);hash.update(await readFile(new URL(file.replaceAll('\\','/'),out)));}
+const template=await readFile(new URL('sw.template.js',source),'utf8');
+hash.update(template);
+const version=hash.digest('hex').slice(0,12);
+const assets=files.map(file=>file==='index.html'?'/mobile/':file==='chart.html'?'/mobile/chart':'/mobile/'+file.replaceAll('\\','/'));
+await writeFile(new URL('sw.js',out),template.replace('__BUILD__',version).replace('__ASSETS__',JSON.stringify(assets)));
+await writeFile(new URL('web/dist/_headers',root),'/mobile/*\n  Cache-Control: no-cache\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n');
+console.log('Mobil-PWA byggd: '+version);
