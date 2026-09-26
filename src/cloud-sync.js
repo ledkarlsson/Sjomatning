@@ -60,3 +60,15 @@ async function syncLibrary({ files, token, calibrations = {}, previous = {}, che
   return {...result, user:user.name}
 }
 module.exports = {syncLibrary,CLOUD_URL}
+
+async function listCloudUsers({token,onAuthenticated=async()=>{},fetchImpl=fetch}) {
+  async function get(route){
+    const response=await fetchImpl(CLOUD_URL+'/api/'+route,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+    if(response.status===401)throw Object.assign(new Error('Åtkomstnyckeln är inte giltig.'),{code:'AUTH_REQUIRED'});
+    const data=await response.json();if(!response.ok)throw new Error(data.error||'Kunde inte läsa nycklar.');return data;
+  }
+  const user=await get('session');await onAuthenticated();
+  if(user.id!=='admin')throw new Error('Endast administratörer kan se åtkomstnycklar.');
+  return {users:await get('users')};
+}
+module.exports.listCloudUsers=listCloudUsers;

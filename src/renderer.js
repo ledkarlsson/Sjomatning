@@ -46,6 +46,19 @@ if (window.sjomatning.syncCloudLibrary) {
     dialog.showModal()
     input.focus()
   })
+  $('cloudUsers').onclick=async()=>{
+    const button=$('cloudUsers'),container=$('cloudUsersList');button.disabled=true;container.textContent='Hämtar nycklar…';
+    try {
+      let result=await window.sjomatning.listCloudUsers({});
+      while(result.needsToken){const token=await askForCloudKey(result.message);if(token===null){container.textContent='';return;}result=await window.sjomatning.listCloudUsers({token});}
+      container.replaceChildren();container.style.overflowX='auto';
+      const table=document.createElement('table'),head=table.createTHead().insertRow();
+      for(const label of ['Alias','Nyckel-ID','Rättigheter','Status']){const th=document.createElement('th');th.textContent=label;th.scope='col';head.append(th);}
+      const body=table.createTBody();
+      for(const user of result.users){const row=body.insertRow();for(const value of [user.name,user.id,user.id==='admin'?'Administratör':user.role==='all'?'Hela biblioteket':'Egna spår',user.active?'Aktiv':'Spärrad'])row.insertCell().textContent=value;}
+      container.append(table);const note=document.createElement('p');note.textContent='Nyckelvärden kan inte visas i efterhand. Nyckel-ID identifierar varje nyckel.';container.append(note);
+    }catch(error){container.textContent=error.message;}finally{button.disabled=false;}
+  }
   $('syncCloudLibrary').onclick = async () => {
     const button = $('syncCloudLibrary'), input = $('cloudSyncToken')
     button.disabled = true

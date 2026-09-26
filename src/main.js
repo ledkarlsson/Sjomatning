@@ -6,7 +6,7 @@ const { autoUpdater } = require('electron-updater')
 const { fetchRoxenLevel, fetchLatestRoxenLevel } = require('./roxen-level')
 const { exportAnnotatedManuscript } = require('./manuscript-annotations')
 const { createLibraryStore } = require('./library-store')
-const { syncLibrary } = require('./cloud-sync')
+const { syncLibrary, listCloudUsers } = require('./cloud-sync')
 const { createCloudCredentials, syncWithSavedKey } = require('./cloud-credentials')
 let cloudSyncBusy = false
 const packageMetadata = require('../package.json')
@@ -139,6 +139,10 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
 ipcMain.handle('library:update', (_event, id, changes) => libraryStore.update(id, changes))
 ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'kap', 'wci', 'bsb', 'txt', 'csv', 'trc', 'sl2', 'sl3'] }] }))
 ipcMain.handle('library:list', () => libraryStore.list())
+ipcMain.handle('library:cloud-users', async (_event, {token} = {}) => {
+  const credentials=createCloudCredentials(path.join(app.getPath('userData'),'cloud-key.bin'),safeStorage)
+  return syncWithSavedKey(credentials,listCloudUsers,{token})
+})
 ipcMain.handle('library:sync-cloud', async (event, {token, calibrations = {}} = {}) => {
   if (cloudSyncBusy) throw new Error('En synkning pågår redan.')
   cloudSyncBusy = true

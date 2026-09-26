@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('sjomatning', {
   openFolder: () => ipcRenderer.invoke('files:open-folder'),
   scanDroppedEntries: files => ipcRenderer.invoke('files:scan-paths', files.map(file => webUtils.getPathForFile(file))),
   listLibrary: () => ipcRenderer.invoke('library:list'),
+  listCloudUsers: options => ipcRenderer.invoke('library:cloud-users', options),
   syncCloudLibrary: options => ipcRenderer.invoke('library:sync-cloud', options),
   onCloudSyncProgress: callback => ipcRenderer.on('library:sync-progress', (_event, data) => callback(data)),
   removeLibraryFile: id => ipcRenderer.invoke('library:remove', id),
