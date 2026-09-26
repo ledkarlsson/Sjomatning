@@ -38,6 +38,24 @@ Varje serverändring kontrollerar föregående revision. Vid samtidiga ändringa
 
 ## Exportera
 
+### Mätpass och mätmetod
+
+I händelsens **Mätunderlag** kan du välja **Nytt mätpass** och ange namn, båt/källa, område, vattenstånd, referensnivå och höjdsystem. Ange vattenstånd och referensnivå i samma höjdsystem. Sparade pass kan återanvändas från listan. Ett nytt pass sparas tillsammans med den första händelsen; tomma pass sparas inte separat.
+
+Djupobservationer i ett mätpass kräver mätmetod: stångmätning, manuellt ekolod, ekolod från NMEA eller uppskattat djup/höjd. Metoden anges av användaren; valet NMEA kopplar inte automatiskt ett instrumentpaket till händelsen. Rådjupet bevaras. Negativt rådjup anger höjd över vattenytan. Korrigerat djup beräknas som **rådjup − (vattenstånd − referensnivå)**. Utan mätpass görs ingen vattenståndskorrigering.
+
+Varje händelse bevarar en kopia av sitt mätunderlag med pass-id. Om passuppgifterna ändras vid redigering får den händelsen en ny passversion; äldre händelser ändras inte i efterhand. Underlaget följer med i lagring, synkning och JSON/CSV/PDF-export. Äldre händelser får inte påhittade pass eller metoder. Uppdatera desktopappen innan redigering av de nya uppgifterna där.
+
+### Samlad kart-PDF
+
+Välj kartunderlag och slå på de spår som ska ingå. Klicka **Exportera kartvy till PDF** under dagboksknappen. Välj rubrik och delar som ska exporteras. Kartan blir en liggande A4-sida med separata PDF-lager för **Kartbakgrund**, **Mätpunkter**, **Djupsiffror** och **Observationer**. Valda lager är påslagna från början och kan växlas i en PDF-läsare med lagerstöd.
+
+Webbkartan exporteras i aktuellt utsnitt; ett öppet lokalt manus exporteras som den aktuella hela kartbilden/sidan. Bakgrunden är en rasterbild med samma detaljnivå som den inlästa kartan. Vänta tills kartor och fältmanus laddats klart. Mätpunkter och texter är vektorer. Original-PDF:ens egna lager överförs inte. Exporten är inte georefererad och gör ingen automatisk flersidig atlas.
+
+Spårens gallring, vattenståndskorrigering och extra djupjustering används. Täta djupsiffror glesas ut och antalet utelämnade siffror anges. När observationsnummer skulle överlappa flyttas numret och en linje pekar till rätt position. Sparade observationer inom kartbilden får samma nummer i den efterföljande dagboksförteckningen, med tid, koordinat, text, rådjup, metod och mätunderlag. Händelser utan position eller utanför bilden ingår inte i kart-PDF:en, men finns i den vanliga dagboksexporten.
+
+En separat sida redovisar spårens beräkningsunderlag. Exporten ändrar inga original eller mätvärden. PDF:en kan öppnas fristående; lagerreglage i själva appens PDF-visare ingår inte i denna funktion. Automatisk ifyllnad av djupfyrkanter återstår.
+
 Exporten omfattar alla sparade, ej borttagna händelser i den aktuella dagboken, i tidsordning. Spara utkast före export. Synka först om webbens senaste ändringar ska ingå.
 
 - **JSON:** komplett händelsedata med stabila id:n, UTC-tid, text, valfritt djup och position. Format `SjomatningObservationJournal`, version 1. Detta är inte Jonas `.obs`-format; import är ännu inte implementerad.

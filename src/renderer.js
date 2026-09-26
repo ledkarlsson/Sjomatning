@@ -1,3 +1,4 @@
+import {observationDepth} from './journal-model.mjs'
 import { mountMapContext, trackPointDialog } from './map-context.mjs'
 import { manualTrackFile } from './manual-track.mjs'
 import { mountJournal } from './journal-ui.mjs'
@@ -389,6 +390,7 @@ function cachedTile(url) {
   let entry = tileCache.get(url)
   if (entry) return entry.image
   const image = new Image()
+  image.crossOrigin = 'anonymous'
   entry = { image: null, failed: false }
   tileCache.set(url, entry)
   const timeout = setTimeout(() => { image.src = ''; finish(false) }, 12000)
@@ -1796,3 +1798,26 @@ mountMapContext({canvas:overlay,toGeo:event=>{const p=canvasPoint(event);return 
     renderLogs();renderFolder();drawOverlay();toast('Spårpunkten är sparad.');return id
   })
 }})
+
+const chartExportButton=document.createElement('button');chartExportButton.className='button';chartExportButton.id='exportChartPdf';chartExportButton.textContent='Exportera kartvy till PDF';document.querySelector('.journal-panel').append(chartExportButton);
+chartExportButton.onclick=()=>{
+ if(!state.transform||annotationEditor.file){toast('Öppna en kalibrerad karta och avsluta manusredigeringen först.');return;}
+ const dialog=document.createElement('dialog');dialog.className='journal-dialog';dialog.innerHTML='<form><h2>Exportera kartvy till PDF</h2><p>Aktuell kartbild och synliga spår exporteras. Sparade observationer inom bilden numreras och får en förteckning. Slå på önskade spår och kartunderlag innan export.</p><label>Rubrik<input name="title" value="Mätkarta" maxlength="100" required></label><label><input type="checkbox" name="background" checked>Kartbakgrund</label><label><input type="checkbox" name="points" checked>Mätpunkter</label><label><input type="checkbox" name="depths" checked>Djupsiffror</label><label><input type="checkbox" name="observations" checked>Observationer och förteckning</label><p>Valda delar blir separata, av/på-valbara PDF-lager. Lagerpanelen kräver en PDF-läsare med lagerstöd. Täta djupsiffror glesas ut för läsbarhet.</p><p role="status"></p><button type="submit">Spara PDF</button> <button type="button" data-cancel>Avbryt</button></form>';
+ document.body.append(dialog);dialog.showModal();let busy=false;dialog.oncancel=e=>{if(busy)e.preventDefault();};dialog.onclose=()=>dialog.remove();dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
+ dialog.querySelector('form').onsubmit=async event=>{
+  event.preventDefault();if(busy)return;busy=true;const form=event.target,feedback=dialog.querySelector('[role=status]');dialog.querySelectorAll('button,input').forEach(el=>el.disabled=true);feedback.textContent='Skapar PDF…';
+  try{
+   const layers=Object.fromEntries(['background','points','depths','observations'].map(k=>[k,form.elements[k].checked]));if(!Object.values(layers).some(Boolean))throw new Error('Välj minst ett lager.');
+   const data=await window.sjomatning.journalList();
+   const inside=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.y>=0&&p.x<=state.width&&p.y<=state.height;
+   const logs=state.logs.filter(log=>log.visible),points=[];
+   for(const log of logs)for(const point of processedPoints(log)){const p=geoToPixel(point.lat,point.lon);if(inside(p))points.push({...p,depth:correctedDepth(log,point)});}
+   if(points.length>100000)throw new Error('För många punkter för PDF. Zooma in eller öka spårens gallring.');
+   const width=state.width,height=state.height,png=layers.background?pdfCanvas.toDataURL('image/png'):null;
+   const observations=[],rows=[];
+   if(layers.observations)for(const row of data.rows){if(row.deleted||row.event.lat==null)continue;const p=geoToPixel(row.event.lat,row.event.lon);if(p&&p.x>=0&&p.y>=0&&p.x<=width&&p.y<=height){rows.push(row);observations.push({...p,id:row.event.id,depth:observationDepth(row.event)});}}
+   const result=await window.sjomatning.exportChartPdf({title:form.elements.title.value,width,height,png,points,rows,observations,layers,tracks:logs.map(log=>log.name+': '+depthExplanation(log)),attribution:state.map?'© OpenStreetMap contributors, OpenSeaMap':(state.library.pdfs.find(f=>f.id===state.activePdfId)?.name||'Lokalt fältmanus')});
+   if(result){dialog.close();toast('Kart-PDF är sparad.');}else feedback.textContent='Exporten avbröts.';
+  }catch(error){feedback.textContent=error.message;}finally{busy=false;dialog.querySelectorAll('button,input').forEach(el=>el.disabled=false);}
+ };
+};

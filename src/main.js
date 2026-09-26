@@ -166,6 +166,14 @@ ipcMain.handle('journal:sync', async (_event, {token} = {}) => {
   const credentials=createCloudCredentials(path.join(app.getPath('userData'),'cloud-key.bin'),safeStorage)
   return syncWithSavedKey(credentials,journalStore.sync,{token})
 })
+ipcMain.handle('chart:export-pdf',async(_event,data)=>{
+  const bytes=await (await import('./chart-pdf.mjs')).chartPdf(data,require('pdf-lib'))
+  const result=await dialog.showSaveDialog({title:'Exportera mätkarta',defaultPath:'matkarta.pdf',filters:[{name:'PDF',extensions:['pdf']}]})
+  if(result.canceled||!result.filePath)return null
+  const relative=path.relative(app.getPath('userData'),path.resolve(result.filePath))
+  if(!relative||(!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative)))throw new Error('Exportera utanför appens datamapp.')
+  await fs.writeFile(result.filePath,bytes);return result.filePath
+})
 ipcMain.handle('journal:export', async (_event, format) => {
   if(!['json','csv','pdf'].includes(format))throw new Error('Okänt exportformat.')
   const {rows}=await journalStore.list()

@@ -54,6 +54,7 @@ async function choose(folder = false) {
 let records = [], app;
 const journalPendingWrites = new Map();
 window.sjomatning = {
+  exportChartPdf: async data => {const {chartPdf}=await import('./src/chart-pdf.mjs');return download(await chartPdf(data,await import('./pdf-lib.mjs')),'matkarta.pdf','application/pdf');},
   createTrackPoint: async value => {
     const {manualTrackFile}=await import('./src/manual-track.mjs');
     const file=manualTrackFile(value);

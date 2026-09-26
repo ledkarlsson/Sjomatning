@@ -10,6 +10,7 @@ app.whenReady().then(async()=>{
  ipcMain.handle('tracks:create-point',async(_,value)=>{const file=(await import('../src/manual-track.mjs')).manualTrackFile(value);await library.persist([{name:file.name,bytes:Buffer.from(file.content)}]);return (await library.list())[0];});
  ipcMain.handle('files:launch-pdf',()=>null);ipcMain.handle('app:info',()=>({version:'test',buildDate:'2026-09-26'}));ipcMain.handle('roxen:water-level',()=>({ok:false}));
  let exported;
+ ipcMain.handle('chart:export-pdf',async(_,data)=>{const {chartPdf}=await import('../src/chart-pdf.mjs');const bytes=await chartPdf(data,require('pdf-lib'));await fs.writeFile(path.resolve('tmp/chart-preview.pdf'),bytes);return 'tmp/chart-preview.pdf';});
  ipcMain.handle('journal:export',async(_,format)=>{const {rows}=await store.list();if(format==='pdf'){const {journalPdf}=await import('../src/journal-pdf.mjs');exported=path.resolve('tmp/journal-preview.pdf');await fs.writeFile(exported,await journalPdf(rows,require('pdf-lib')));}else{exported=(await import('../src/journal-model.mjs')).exportJournal(rows,format);}return exported;});
  await session.defaultSession.protocol.handle('https',()=>new Response('',{status:404}));
  let win=new BrowserWindow({show:false,width:1400,height:1000,webPreferences:{preload:path.resolve('src/preload.js'),sandbox:true,contextIsolation:true,backgroundThrottling:false,offscreen:true}});
@@ -20,6 +21,7 @@ app.whenReady().then(async()=>{
  await run(`document.querySelector('[data-open]').click()`);
  await wait(`document.querySelector('[data-list]').textContent.includes('Inga händelser') && !document.querySelector('[name=text]').disabled`);
  assert.ok(await run(`document.querySelector('[name=occurredAt]').value.length>10`));
+ await run(`document.querySelector('[name=survey]').value='new';document.querySelector('[name=survey]').dispatchEvent(new Event('change'));for(const [key,value] of Object.entries({surveyName:'Granholmen september',vessel:'Scilla',area:'Roxen',waterLevel:'33.4',referenceLevel:'33',reference:'RH00',method:'pole'}))document.querySelector('[name='+key+']').value=value;`);
  await run(`document.querySelector('[name=text]').value='Gick på grund vid inloppet. Återkom för stångmätning.';document.querySelector('[name=occurredAt]').value='2026-09-25T14:32:15';document.querySelector('[name=lat]').value='58.52';document.querySelector('[name=lon]').value='15.71';document.querySelector('[data-editor]').requestSubmit()`);
  await wait(`document.querySelector('[data-status]').textContent.includes('sparad')`);
  assert.equal((await store.list()).rows.length,1);
@@ -40,6 +42,7 @@ app.whenReady().then(async()=>{
  await run(`document.querySelector('[data-editor]').requestSubmit()`);
  await wait(`document.querySelector('[data-status]').textContent.includes('sparad') && !document.querySelector('[data-map-position]').disabled`);
  const placed=(await store.list()).rows[0].event;assert.equal(placed.depth,1.4);assert.equal(placed.lat,picked.lat);assert.equal(placed.lon,picked.lon);
+ assert.equal(placed.method,'pole');assert.equal(placed.survey.vessel,'Scilla');assert.equal(placed.survey.waterLevel,33.4);
  await run(`document.querySelector('[data-close]').click()`);
  await wait(`JSON.parse(document.querySelector('#overlayCanvas').dataset.journalMarkers).length===1`);
  await new Promise(r=>setTimeout(r,300));await fs.writeFile(path.resolve('tmp/journal-map.png'),(await win.webContents.capturePage()).toPNG());
@@ -87,6 +90,11 @@ app.whenReady().then(async()=>{
  await wait(`!document.querySelector('[name=track]')`);
  const saved=(await library.list())[0];assert.equal(saved.edits.points.length,2);assert.equal(saved.edits.points[1].depth,null);assert.equal(Buffer.from(saved.bytes).toString(),original);
  console.log('PASS: map context menu dismissal, positioned event draft, saved new track and appended point with original preserved.');
+ await run(`document.querySelector('#exportChartPdf').click()`);
+ await wait(`!!document.querySelector('[name=background]')`);
+ await run(`document.querySelector('[name=background]').form.requestSubmit()`);
+ await wait(`!document.querySelector('[name=background]')`);
+ assert.ok((await fs.stat(path.resolve('tmp/chart-preview.pdf'))).size>1000);
 
  // Exercise the built browser adapter and the same editor in the real web shell.
  const http=require('node:http');
@@ -148,6 +156,9 @@ app.whenReady().then(async()=>{
   await wait(`!document.querySelector('[name=track]')`);
   const webTrack=(await library.list()).find(file=>file.name==='Webbspår.csv');assert.ok(webTrack);assert.ok(Buffer.from(webTrack.bytes).toString().trim().endsWith(',0'));
   console.log('PASS: browser context menu uploads manual track with zero depth.');
+  await run(`window.exportBlob=null;document.querySelector('#exportChartPdf').click()`);await wait(`!!document.querySelector('[name=background]')`);
+  await run(`document.querySelector('[name=background]').form.requestSubmit()`);await wait(`!!window.exportBlob && !document.querySelector('[name=background]')`);assert.ok(await run(`window.exportBlob.size>1000`));
+  console.log('PASS: layered chart PDF export through desktop and browser adapters.');
  }finally{server.close();}
  app.quit();
 }).catch(error=>{console.error(error);app.exit(1)});

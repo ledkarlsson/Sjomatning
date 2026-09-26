@@ -52,19 +52,19 @@ På längre sikt finns aktiv ruttnavigation, loggbok, flera instrumentanslutning
 
 Jämförelsen gjordes 2026-09-26 mot koden i arbetsmappen, inklusive mobil-PWA:n, och Jonas Pythonverktyg. Den beskriver utvecklingsbehov, inte färdiga funktioner eller en verifiering av publicerad version. Referensmaterialet finns lokalt i `FrånJonas/`; hela mappen ska hållas utanför Git och är undantagen i `.gitignore`.
 
-Det största gapet är en positionskopplad observationsdagbok och möjligheten att skapa färdiga PDF-sjökort med mätdata. Dagens manusanteckningar är text placerad på en viss sida. En geografisk observation, exempelvis ”Gick på grund”, behöver i stället kunna visas på flera kartor och kopplas till ett mätpass.
+Webb och desktop har nu positionskopplad observationsdagbok, mätpass med mätmetod och vattenståndsunderlag samt samlad PDF-kartexport med valbara lager. Återstående Jonas-kompatibilitet omfattar främst OBS-format, hans kartkalibrering, tilläggningsplatser och djupfyrkanter. Mobilutbyggnad är tills vidare inte prioriterad.
 
 ### Nuläge jämfört med Jonas
 
 | Funktion | Nuläge i Sjömätning / arbete som återstår |
 |---|---|
 | PDF-lager | PDF visas, men reglage för dess inbäddade lager saknas. Jonas 24 granskade resultat-PDF:er har lagren **Djuppunkter**, **Djupsiffror** och **Djup i fyrkanter**. Att visa/dölja våra separata mätspår är en annan funktion. |
-| Observationsdagbok | Fria händelser med redigerbar tid och valfri position finns nu på desktop/webb. Strukturerade observationstyper och koppling till mätpass återstår. |
+| Observationsdagbok | Händelser med redigerbar tid, valfri position/rådjup, mätmetod och versionsbevarat mätpass finns på desktop/webb. Passet innehåller båt, område, vattenstånd, referensnivå och höjdsystem. |
 | Notera vid båten | Desktopdagboken kan hämta aktuell GPS-position. Mobil-PWA:n sparar position och manuellt djup men saknar fortfarande dagboksflödet. |
 | Mätmetod och kommentar | Mobilens djupunkter saknar strukturerad mätmetod, exempelvis stångmätning, manuellt ekolod eller uppskattning, samt kommentar. |
 | Tilläggningsplats | Observation med flera koordinater och en gemensam beskrivning saknas. |
 | OBS-format | Import och export av Jonas `.obs`-filer (`KodObservationFile`, version 1) saknas. |
-| PDF med mätdata | En separat PDF med dagbokshändelser finns nu. Manusets PDF-export saknar fortfarande separata mätspår, automatiska djupsiffror och numrerade hänvisningar till observationer. |
+| PDF med mätdata | Samlad export av aktuell kartbild med mätpunkter, djupsiffror, numrerade observationer och förteckning finns. Fyra valbara PDF-lager. Kartbakgrunden är raster; flersidig atlas och georefererad export återstår. |
 | Djupfyrkanter | Automatisk ifyllnad av fältmanusets djupfyrkanter och antal återstående rutor saknas. |
 | Jonas kartkalibrering | GeoPDF och vår egen kalibrering stöds, men Jonas inbäddade `chart_metadata.json` läses inte. Hans kalibrering följer därför inte automatiskt med vid import. |
 
