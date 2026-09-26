@@ -20,7 +20,7 @@ export async function journalApi(request,env,user,readJson) {
   // upsert also rejects simultaneous edits atomically within D1.
   const existing=await env.DB.prepare('SELECT * FROM journal_events WHERE owner=? AND id=?').bind(user.id,id).first();
   if(existing?.mutation===body.mutation) {
-    if(existing.data!==data||existing.deleted!==deleted)return response({error:'Ändrings-id används redan.'},409);
+    if(JSON.stringify(validateEvent(JSON.parse(existing.data)))!==data||existing.deleted!==deleted)return response({error:'Ändrings-id används redan.'},409);
     return response(record(existing));
   }
   if((existing?.revision??0)!==body.baseRevision)return response({error:'Händelsen har ändrats på en annan enhet.',current:existing?record(existing):null},409);

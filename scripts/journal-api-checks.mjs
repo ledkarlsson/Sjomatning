@@ -11,7 +11,7 @@ export async function checkJournal(mf,key,otherKey) {
   const root=await mkdtemp(path.join(os.tmpdir(),'journal-test-'));
   try{
     const one=storeModule.createJournalStore(path.join(root,'one.json')),two=storeModule.createJournalStore(path.join(root,'two.json'));
-    const original={id:randomUUID(),text:'Gick på grund. Återkom för mätning.',occurredAt:'2026-09-26T08:32:11.000Z',lat:58.5,lon:15.7};
+    const original={id:randomUUID(),text:'Gick på grund. Återkom för mätning.',occurredAt:'2026-09-26T08:32:11.000Z',lat:58.5,lon:15.7,depth:1.4};
     await one.save({event:original});
     await assert.rejects(one.save({event:{...original,text:'Stale draft'},expectedMutation:null}),/ändrats/);
     assert.equal((await storeModule.createJournalStore(path.join(root,'one.json')).list()).rows[0].event.text,original.text);
@@ -30,7 +30,7 @@ export async function checkJournal(mf,key,otherKey) {
     assert.equal((await one.list()).rows[0].event.text,'Ny lokal text');
     await one.resolve(original.id,'local');await one.sync({token:key,fetchImpl,origin});
     await two.sync({token:key,fetchImpl,origin});
-    const final=(await two.list()).rows[0];assert.equal(final.event.text,'Ny lokal text');assert.equal(final.event.occurredAt,'2026-09-25T12:00:00.000Z');
+    const final=(await two.list()).rows[0];assert.equal(final.event.text,'Ny lokal text');assert.equal(final.event.depth,1.4);assert.equal(final.event.occurredAt,'2026-09-25T12:00:00.000Z');
     await assert.rejects(one.sync({token:otherKey,fetchImpl,origin}),/annan nyckel/);
     const oneCurrent=(await one.list()).rows[0];await one.save({event:oneCurrent.event,expectedMutation:oneCurrent.mutation,deleted:true});
     await one.sync({token:key,fetchImpl,origin});await two.sync({token:key,fetchImpl,origin});assert.equal((await two.list()).rows[0].deleted,true);

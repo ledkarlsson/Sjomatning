@@ -23,3 +23,12 @@ test('PDF paginates long content, retains Swedish text and rejects unsupported g
   const bytes=await journalPdf(rows,pdf);const doc=await pdf.PDFDocument.load(bytes);assert.ok(doc.getPageCount()>3);
   await assert.rejects(journalPdf([{event:{...event(),text:'😀'}}],pdf),/stöder inte/);
 });
+
+test('optional depth accepts zero, rejects invalid values and is exported',()=>{
+  assert.equal(validateEvent(event()).depth,null);
+  assert.equal(validateEvent({...event(),depth:0}).depth,0);
+  for(const depth of [-1,NaN,Infinity,'2',12001])assert.throws(()=>validateEvent({...event(),depth}),/djup/);
+  const rows=[{event:validateEvent({...event(),depth:2.75})}];
+  assert.equal(JSON.parse(exportJournal(rows,'json')).events[0].depth,2.75);
+  assert.ok(exportJournal(rows,'csv').includes('"2.75"'));
+});

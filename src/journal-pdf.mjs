@@ -24,6 +24,7 @@ export async function journalPdf(rows,{PDFDocument,StandardFonts,rgb}) {
     if(y<bottom+95)newPage();
     wrapped(`${index+1}. ${row.event.occurredAt.replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC')}`,bold,12);
     if(row.event.lat!==null)line(`Position: ${row.event.lat.toFixed(6)}, ${row.event.lon.toFixed(6)}`,regular,10);
+    if(row.event.depth!=null)line(`Djup: ${row.event.depth.toFixed(2)} m (angivet värde)`,regular,10);
     wrapped(row.event.text);y-=13;
   }
   const pages=doc.getPages();pages.forEach((p,i)=>p.drawText(`Sida ${i+1} av ${pages.length}`,{x:left,y:30,size:9,font:regular,color:rgb(.4,.4,.4)}));

@@ -11,6 +11,7 @@ import { parseNmeaSentence } from './nmea-parser.mjs'
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).href
 
 const colors = Array.from({length: 360}, (_, i) => `hsl(${(i * 137.508) % 360} 70% 38%)`)
+let journalController=null,journalRows=[],journalPick=null,journalMarkers=[]
 let focusedTrack = null
 let comparison = null
 let comparisonMatches = null
@@ -713,6 +714,7 @@ function depthColor(depth, min, max) {
 
 function drawOverlay() {
   const context = overlay.getContext('2d')
+  journalMarkers=[];overlay.dataset.journalMarkers='[]'
   context.clearRect(0, 0, state.width, state.height)
   delete overlay.dataset.boatX; delete overlay.dataset.boatY
 
@@ -773,6 +775,7 @@ function drawOverlay() {
   }
 
   drawManuscriptNotes(context)
+  drawJournalMarkers(context)
 }
 
 function correctedDepth(log, point) {
@@ -1720,8 +1723,52 @@ function manuscriptImage(file) {
   return canvas
 }
 
-mountJournal(window.sjomatning,async()=>{
+journalController=mountJournal(window.sjomatning,async()=>{
   if(state.live?.position && Date.now()-state.live.positionAt<5000)return state.live.position
   if(!navigator.geolocation)return null
   return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(p=>resolve({lat:p.coords.latitude,lon:p.coords.longitude}),()=>reject(new Error('GPS-position kunde inte hämtas.')),{enableHighAccuracy:true,maximumAge:0,timeout:10000}))
-})
+},{onRows:rows=>{journalRows=rows;drawOverlay()},pick:async()=>{
+  if(!state.transform)await loadRoxenMap()
+  if(!state.transform)throw new Error('Öppna kartan eller kalibrera fältmanuset först.')
+  state.armed=false;annotationEditor.placing=false
+  const banner=document.createElement('div');banner.className='journal-map-pick';banner.setAttribute('role','status');
+  banner.append('Klicka i kartan för händelsens position. Du kan zooma och panorera. ')
+  const cancel=document.createElement('button');cancel.textContent='Avbryt';banner.append(cancel);document.body.append(banner)
+  overlay.style.cursor='crosshair'
+  return new Promise(resolve=>{
+    const key=event=>{if(event.key==='Escape'){event.preventDefault();finish(null)}}
+    const finish=point=>{journalPick=null;banner.remove();overlay.style.cursor='';document.removeEventListener('keydown',key);resolve(point)}
+    journalPick=finish;cancel.onclick=()=>finish(null);document.addEventListener('keydown',key)
+  })
+}})
+
+function drawJournalMarkers(context){
+  context.save()
+  for(const row of journalRows){
+    const event=row.event
+    if(row.deleted||!Number.isFinite(event.lat)||!Number.isFinite(event.lon))continue
+    const p=geoToPixel(event.lat,event.lon)
+    if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.y<0||p.x>state.width||p.y>state.height)continue
+    const size=9/state.scale
+    context.beginPath();context.arc(p.x,p.y,size,0,Math.PI*2)
+    context.fillStyle='#7b3294';context.fill();context.strokeStyle='#fff';context.lineWidth=2/state.scale;context.stroke()
+    context.fillStyle='#fff';context.font=`bold ${11/state.scale}px system-ui`;context.textAlign='center';context.fillText('H',p.x,p.y+4/state.scale)
+    if(event.depth!=null){context.font=`bold ${12/state.scale}px system-ui`;context.textAlign='left';const label=event.depth.toLocaleString('sv-SE')+' m';context.strokeStyle='#fff';context.lineWidth=3/state.scale;context.strokeText(label,p.x+13/state.scale,p.y+4/state.scale);context.fillStyle='#58206d';context.fillText(label,p.x+13/state.scale,p.y+4/state.scale)}
+    journalMarkers.push({id:event.id,x:p.x,y:p.y})
+  }
+  context.restore();overlay.dataset.journalMarkers=JSON.stringify(journalMarkers)
+}
+overlay.addEventListener('click',event=>{
+  if(suppressClick)return
+  const p=canvasPoint(event)
+  if(journalPick){
+    event.preventDefault();event.stopImmediatePropagation()
+    const geo=pixelToGeo(p.x,p.y)
+    if(geo&&Number.isFinite(geo.lat)&&Number.isFinite(geo.lon)&&Math.abs(geo.lat)<=90&&Math.abs(geo.lon)<=180)journalPick(geo)
+    else toast('Välj en punkt inom en kalibrerad karta.')
+    return
+  }
+  if(state.armed||annotationEditor.file)return
+  const nearest=journalMarkers.map(marker=>({...marker,distance:Math.hypot(marker.x-p.x,marker.y-p.y)*state.scale})).filter(marker=>marker.distance<=14).sort((a,b)=>a.distance-b.distance)[0]
+  if(nearest){event.preventDefault();event.stopImmediatePropagation();journalController?.open(nearest.id)}
+},true)

@@ -13,7 +13,7 @@ En Windowsapp för att samla in, visa och jämföra djupmätningar, med Roxen so
 - **GPS och ekolod via USB:** NMEA 0183 med GGA/RMC och DPT/DBT. Visa båt, position, fart och kurs över grund, med följ-båt-läge och separat status för GPS och djup. GPS fungerar även utan ekolod.
 - **Mätning och återställning:** anslutning och mätstart är separata. Spara NMEA-logg och CSV löpande, markera gamla instrumentvärden och återställ kompletta CSV-rader från avbrutna sessioner vid nästa start. Återanslutning sker manuellt.
 - **Simulator:** prova en båttur på Roxen med eller utan ekolod och med valbar hastighet på simuleringen.
-- **Observationsdagbok:** skriv och redigera händelser med automatiskt, ändringsbart datum/klockslag och valfri GPS-position. Spara offline på datorn, synka åt båda håll med din personliga webbdagbok och exportera JSON, CSV eller PDF. Se [dagbokens arbetsflöde](docs/observationsdagbok.md).
+- **Observationsdagbok:** skriv och redigera händelser med automatiskt, ändringsbart datum/klockslag samt valfritt djup och position från GPS eller kartklick. Händelser visas som klickbara kartmarkeringar. Spara offline på datorn, synka åt båda håll med din personliga webbdagbok och exportera JSON, CSV eller PDF. Se [dagbokens arbetsflöde](docs/observationsdagbok.md).
 - **Anteckningar:** placera och redigera text i fältmanus, spara automatiskt och exportera en ny PDF med anteckningarna.
 - **Windowsinstallation och uppdateringar:** installationsprogram och automatisk hämtning av nya versioner, med versionsnummer och byggdatum i appen.
 
