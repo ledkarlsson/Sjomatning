@@ -1,9 +1,10 @@
 import {journalPdf} from './journal-pdf.mjs';
+import {pdfFonts} from './pdf-fonts.mjs';
 import {orderedEvents} from './journal-model.mjs';
 export async function chartPdf(data,lib){
  const {PDFDocument,PDFName,PDFHexString,PDFOperator,StandardFonts,rgb}=lib;
  if(!data||!Number.isFinite(data.width)||!Number.isFinite(data.height)||data.width<=0||data.height<=0||data.width*data.height>40000000)throw new Error('Kartvyn är för stor eller saknas.');
- const doc=await PDFDocument.create(),font=await doc.embedFont(StandardFonts.Helvetica),bold=await doc.embedFont(StandardFonts.HelveticaBold);
+ const doc=await PDFDocument.create(),{regular:font,bold}=await pdfFonts(doc);
  doc.setTitle(data.title||'Mätkarta');
  const page=doc.addPage([841.89,595.28]),margin=32,scale=Math.min(777/data.width,450/data.height),w=data.width*scale,h=data.height*scale,x=(841.89-w)/2,y=78+(450-h)/2;
  const groups=[],properties=doc.context.obj({});

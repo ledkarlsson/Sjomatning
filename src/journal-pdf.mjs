@@ -1,12 +1,13 @@
 import {orderedEvents,observationDetails} from './journal-model.mjs';
+import {pdfFonts} from './pdf-fonts.mjs';
 export async function journalPdf(rows,{PDFDocument,StandardFonts,rgb}) {
   const doc=await PDFDocument.create();doc.setTitle('Observationsdagbok');
-  const regular=await doc.embedFont(StandardFonts.Helvetica),bold=await doc.embedFont(StandardFonts.HelveticaBold);
+  const {regular,bold}=await pdfFonts(doc);
   let page,y; const width=499,left=48,bottom=58;
   function newPage(){page=doc.addPage([595.28,841.89]);y=787;page.drawText('OBSERVATIONSDAGBOK',{x:left,y,size:19,font:bold,color:rgb(.08,.24,.29)});y-=27;page.drawText('Sjömätning | Händelsetider i UTC',{x:left,y,size:10,font:regular,color:rgb(.35,.4,.43)});y-=33;}
   function line(text,font=regular,size=11){if(y<bottom)newPage();page.drawText(text,{x:left,y,size,font});y-=size+5;}
   function wrapped(text,font=regular,size=11){
-    try {font.encodeText(text);}catch{throw new Error('PDF-exporten stöder inte alla tecken i händelserna. Använd vanliga bokstäver och symboler (å, ä, ö stöds), eller exportera JSON för att bevara alla tecken.');}
+    font.encodeText(text);
     for(const paragraph of text.replaceAll('\t','    ').split('\n')){
       let current='';
       for(const word of paragraph.split(' ')){

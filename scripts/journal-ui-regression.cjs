@@ -15,7 +15,7 @@ app.whenReady().then(async()=>{
  await session.defaultSession.protocol.handle('https',()=>new Response('',{status:404}));
  let win=new BrowserWindow({show:false,width:1400,height:1000,webPreferences:{preload:path.resolve('src/preload.js'),sandbox:true,contextIsolation:true,backgroundThrottling:false,offscreen:true}});
  const run=s=>win.webContents.executeJavaScript(s);
- const wait=async s=>{for(let i=0;i<160;i++){if(await run(s))return;await new Promise(r=>setTimeout(r,50));}throw Error('Timed out: '+s);};
+ const wait=async s=>{for(let i=0;i<160;i++){if(await run(s))return;await new Promise(r=>setTimeout(r,50));}throw Error('Timed out: '+s+' Status: '+await run(`[...document.querySelectorAll('[role=status]')].map(el=>el.textContent).join(' | ')`));};
  await win.loadFile(path.resolve('src/index.html'));
  await wait(`!!document.querySelector('[data-open]')`);
  await run(`document.querySelector('[data-open]').click()`);
@@ -92,7 +92,7 @@ app.whenReady().then(async()=>{
  console.log('PASS: map context menu dismissal, positioned event draft, saved new track and appended point with original preserved.');
  await run(`document.querySelector('#exportChartPdf').click()`);
  await wait(`!!document.querySelector('[name=background]')`);
- await run(`document.querySelector('[name=background]').form.requestSubmit()`);
+ await run(`document.querySelector('[name=background]').form.elements.title.value='Karta ╠ Åäö';document.querySelector('[name=background]').form.requestSubmit()`);
  await wait(`!document.querySelector('[name=background]')`);
  assert.ok((await fs.stat(path.resolve('tmp/chart-preview.pdf'))).size>1000);
 
@@ -157,7 +157,7 @@ app.whenReady().then(async()=>{
   const webTrack=(await library.list()).find(file=>file.name==='Webbspår.csv');assert.ok(webTrack);assert.ok(Buffer.from(webTrack.bytes).toString().trim().endsWith(',0'));
   console.log('PASS: browser context menu uploads manual track with zero depth.');
   await run(`window.exportBlob=null;document.querySelector('#exportChartPdf').click()`);await wait(`!!document.querySelector('[name=background]')`);
-  await run(`document.querySelector('[name=background]').form.requestSubmit()`);await wait(`!!window.exportBlob && !document.querySelector('[name=background]')`);assert.ok(await run(`window.exportBlob.size>1000`));
+  await run(`document.querySelector('[name=background]').form.elements.title.value='Karta ╠ Åäö';document.querySelector('[name=background]').form.requestSubmit()`);await wait(`!!window.exportBlob && !document.querySelector('[name=background]')`);assert.ok(await run(`window.exportBlob.size>1000`));
   console.log('PASS: layered chart PDF export through desktop and browser adapters.');
  }finally{server.close();}
  app.quit();

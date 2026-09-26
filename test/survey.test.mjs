@@ -19,3 +19,8 @@ test('chart exports real selectable OCG layers and matching journal appendix',as
  assert.equal(oc.lookup(pdf.PDFName.of('OCGs')).size(),3);assert.equal(doc.getPageCount(),3);
  const names=oc.lookup(pdf.PDFName.of('OCGs')).asArray().map(ref=>doc.context.lookup(ref).lookup(pdf.PDFName.of('Name')).decodeText());assert.deepEqual(names,['Mätpunkter','Djupsiffror','Observationer']);
 });
+test('chart export preserves box-drawing characters in titles and file names',async()=>{
+ const bytes=await chartPdf({width:800,height:500,title:'Karta ╠ Åäö',layers:{points:true},points:[],rows:[],observations:[],tracks:['Spår ╠ 2026.csv'],attribution:'Manus ╠.pdf'},pdf);
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const task=getDocument({data:bytes,useSystemFonts:true}),doc=await task.promise;
+ try{let text='';for(let i=1;i<=doc.numPages;i++)text+=(await (await doc.getPage(i)).getTextContent()).items.map(item=>item.str).join(' ');assert.ok(text.includes('Karta ╠ Åäö'));assert.ok(text.includes('Spår ╠ 2026.csv'));assert.ok(text.includes('Manus ╠.pdf'));}finally{await task.destroy();}
+});

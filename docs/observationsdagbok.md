@@ -60,7 +60,7 @@ Exporten omfattar alla sparade, ej borttagna händelser i den aktuella dagboken,
 
 - **JSON:** komplett händelsedata med stabila id:n, UTC-tid, text, valfritt djup och position. Format `SjomatningObservationJournal`, version 1. Detta är inte Jonas `.obs`-format; import är ännu inte implementerad.
 - **CSV:** semikolonseparerad UTF-8 med kolumnrubriker, korrekt citering och skydd mot formler i textceller. JSON bevarar texten exakt om CSV behöver ett skyddande apostroftecken.
-- **PDF:** fristående A4-dokument med datum/tid i UTC, position, angivet djup, händelsetext, sidbrytningar och sidnummer. Detta är en dagboksrapport, inte export av mätspår ovanpå sjökort. Å, ä och ö stöds; tecken utanför PDF-standardtypsnittets teckenuppsättning ger ett tydligt fel. JSON bevarar även sådana tecken.
+- **PDF:** fristående A4-dokument med datum/tid i UTC, position, angivet djup, händelsetext, sidbrytningar och sidnummer. Detta är en dagboksrapport, inte export av mätspår ovanpå sjökort. PDF-exporterna bäddar in Liberation Sans, som stöder bland annat å, ä, ö och linjeritningstecken som ╠. Tecken som saknas i typsnittet ger ett tydligt fel i stället för tomma rutor. JSON bevarar även sådana tecken.
 
 ## Driftsättning och kontroll
 

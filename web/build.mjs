@@ -1,6 +1,11 @@
 import { mkdir, readFile, writeFile, copyFile, cp } from 'node:fs/promises';
 const root = new URL('../', import.meta.url), output = new URL('./dist/', import.meta.url);
 await mkdir(new URL('src/', output), { recursive: true });
+await copyFile(new URL('src/pdf-fonts.mjs',root),new URL('src/pdf-fonts.mjs',output));
+// The UMD distribution includes pako; the ESM distribution has a bare import.
+await writeFile(new URL('fontkit.mjs',output),'const module={exports:{}}; const exports=module.exports;\n'+await readFile(new URL('node_modules/@pdf-lib/fontkit/dist/fontkit.umd.min.js',root),'utf8')+'\nexport default module.exports;\n');
+await mkdir(new URL('fonts/',output),{recursive:true});
+for(const file of ['LiberationSans-Regular.ttf','LiberationSans-Bold.ttf','LICENSE_LIBERATION'])await copyFile(new URL('node_modules/pdfjs-dist/standard_fonts/'+file,root),new URL('fonts/'+file,output));
 const modules = ['survey-form.mjs','chart-pdf.mjs','map-context.mjs','manual-track.mjs','journal-ui.mjs', 'journal-model.mjs', 'journal-pdf.mjs', 'styles.css', 'renderer.js', 'raster-chart.mjs', 'track-view.mjs', 'track-parser.mjs', 'web-map.mjs', 'track-processing.mjs', 'nmea-simulator.mjs', 'nmea-parser.mjs'];
 for (const file of modules) await copyFile(new URL('src/' + file, root), new URL('src/' + file, output));
 let renderer = await readFile(new URL('src/renderer.js', output), 'utf8');
