@@ -5,7 +5,7 @@ Webben återanvänder appens kartmotor, filtolkning, spårjämförelse, punktred
 ## Användning
 
 - Logga in med en personlig åtkomstnyckel. Sessionskakan är signerad, HttpOnly, Secure och SameSite=Strict och gäller i sju dagar.
-- Administratören skapar och spärrar nycklar via **Åtkomstnycklar**. Nyckeln visas endast vid skapandet; databasen lagrar en SHA-256-hash. En spärr gäller även befintliga sessioner.
+- Administratören listar, namnger, skapar och spärrar nycklar via **Åtkomstnycklar**. Listan visar även adminnyckeln och spärrade nycklar, med typ (Administratör, Hela biblioteket eller Egna spår) och status. Ändra namnfältet och välj **Spara namn**, exempelvis Daniel Karlsson för din egen nyckel. Namnbytet ändrar inte nyckelvärde eller behörighet; adminnyckeln kan inte spärras här. Nyckeln visas endast vid skapandet; databasen lagrar en SHA-256-hash. En spärr gäller även befintliga sessioner.
 - **Hela biblioteket** får läsa och ändra alla filer. **Egna spår** får endast läsa, ladda upp, ändra och radera sina egna spår. Bara administratören administrerar nycklar.
 - PDF, WCI och KAP kan visas som i appen. Ladda upp tillhörande KAP-filer tillsammans med BSB-index; webbläsaren kan inte leta efter filer som inte har valts. Indexet finns under Hämta original.
 - TXT/CSV, SeaClear TRC och Lowrance SL2/SL3 använder samma parser och formatbegränsningar som appen.

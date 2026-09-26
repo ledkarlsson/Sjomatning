@@ -16,6 +16,25 @@ try {
   const makeUser = async (name,role) => { const response = await call('users','POST',{name,role},admin); assert.equal(response.status,201); return response.json(); };
   const a = await makeUser('A','own'), b = await makeUser('B','own'), all = await makeUser('Reviewer','all');
   const ac = await login(a.token), bc = await login(b.token), rc = await login(all.token);
+  const keys = await (await call('users','GET',undefined,admin)).json();
+  assert.equal(keys.length,4);
+  assert.equal(keys[0].id,'admin');
+  assert.ok(keys.every(key => !('token' in key) && !('tokenHash' in key)));
+  for (const cookie of [ac,rc]) {
+    assert.equal((await call('users/admin','PATCH',{name:'Forbidden'},cookie)).status,403);
+    assert.equal((await call('users/'+a.id,'PATCH',{name:'Forbidden'},cookie)).status,403);
+  }
+  assert.equal((await call('users/admin','PATCH',{name:' Daniel Karlsson '},admin)).status,200);
+  assert.equal((await (await call('session','GET',undefined,admin)).json()).name,'Daniel Karlsson');
+  const bearerAdmin = await call('session','GET',undefined,undefined,{Authorization:'Bearer integration-test-secret'});
+  assert.equal((await bearerAdmin.json()).name,'Daniel Karlsson');
+  assert.equal((await call('users/'+a.id,'PATCH',{name:'Båt A'},admin)).status,200);
+  assert.equal((await (await call('session','GET',undefined,ac)).json()).name,'Båt A');
+  for (const name of ['', '   ', 'x'.repeat(101), null]) assert.equal((await call('users/admin','PATCH',{name},admin)).status,400);
+  assert.equal((await call('users/00000000-0000-0000-0000-000000000000','PATCH',{name:'Missing'},admin)).status,404);
+  assert.equal((await call('users/admin','DELETE',undefined,admin)).status,400);
+  const renameAttack=await mf.dispatchFetch('https://test.local/api/users/admin',{method:'PATCH',headers:{Cookie:admin,Origin:'https://evil.local'},body:JSON.stringify({name:'Attack'})});
+  assert.equal(renameAttack.status,403);
   // PWA credentials must take precedence over a different tab's cookie.
   const mobile = (path,token,method='GET',body,cookie=admin) => call(path,method,body,cookie,{Authorization:'Bearer '+token,...(typeof body==='string'?{'Content-Length':String(Buffer.byteLength(body))}:{})});
   assert.equal((await (await mobile('session',b.token)).json()).id,b.id);
@@ -41,6 +60,9 @@ try {
   const attack = await mf.dispatchFetch('https://test.local/api/files/'+file.id, {method:'DELETE',headers:{Cookie:ac,Origin:'https://evil.local'}}); assert.equal(attack.status,403);
   assert.equal((await call('users/'+a.id,'DELETE',undefined,admin)).status,200);
   assert.equal((await call('files','GET',undefined,ac)).status,401);
+  assert.equal((await call('users/'+a.id,'PATCH',{name:'Spärrad båt'},admin)).status,200);
+  const revoked=(await (await call('users','GET',undefined,admin)).json()).find(key=>key.id===a.id);
+  assert.equal(revoked.name,'Spärrad båt'); assert.equal(revoked.active,0);
   assert.equal((await call('login','POST',{password:a.token})).status,401);
   assert.equal((await mobile('session',a.token)).status,401);
   assert.equal((await call('files/'+file.id,'DELETE',undefined,admin)).status,200);

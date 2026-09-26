@@ -86,13 +86,38 @@ if (currentUser.id === 'admin') {
   const manage = document.createElement('button'); manage.textContent = 'Åtkomstnycklar'; header.prepend(manage);
   manage.onclick = async () => {
     const dialog = document.createElement('dialog'); dialog.className = 'login';
-    dialog.innerHTML = '<h2>Personliga åtkomstnycklar</h2><p>Full åtkomst: se och ändra hela biblioteket. Egna spår: se, ändra och ladda upp egna spår.</p><form><label>Namn<input name="name" maxlength="100" required></label><label>Behörighet<select name="role"><option value="own">Endast egna spår</option><option value="all">Hela biblioteket</option></select></label><button class="button">Skapa nyckel</button></form><p role="status"></p><div class="cloud-downloads"></div><button data-close>Stäng</button>';
+    dialog.innerHTML = '<h2>Alla åtkomstnycklar</h2><p>Här visas även administratörens nyckel och spärrade nycklar. Namnet kan ändras utan att nyckeln byts. </p><p>Full åtkomst: se och ändra hela biblioteket. Egna spår: se, ändra och ladda upp egna spår.</p><form><label>Namn<input name="name" maxlength="100" required></label><label>Behörighet<select name="role"><option value="own">Endast egna spår</option><option value="all">Hela biblioteket</option></select></label><button class="button">Skapa nyckel</button></form><p role="status"></p><div class="cloud-downloads"></div><button data-close>Stäng</button>';
     document.body.append(dialog); dialog.showModal(); dialog.querySelector('[data-close]').onclick = () => dialog.close(); dialog.onclose = () => dialog.remove();
     async function listUsers() {
+      const users = await api('users');
       const list = dialog.querySelector('.cloud-downloads'); list.replaceChildren();
-      for (const user of await api('users')) {
-        const row = document.createElement('p'); row.textContent = user.name + ' · ' + (user.role === 'all' ? 'Hela biblioteket' : 'Egna spår') + (user.active ? ' ' : ' · Spärrad');
-        if (user.active) { const revoke = document.createElement('button'); revoke.textContent = 'Spärra'; revoke.onclick = async () => { try { await api('users/' + user.id, { method:'DELETE' }); await listUsers(); } catch(error) { dialog.querySelector('[role=status]').textContent = error.message; } }; row.append(revoke); }
+      for (const user of users) {
+        const row = document.createElement('form');
+        const label = document.createElement('label'); label.textContent = 'Namn';
+        const input = document.createElement('input'); input.value = user.name; input.required = true; input.maxLength = 100;
+        input.setAttribute('aria-label', 'Namn för ' + user.name); label.append(input);
+        const details = document.createElement('p');
+        details.textContent = (user.id === 'admin' ? 'Administratör' : user.role === 'all' ? 'Hela biblioteket' : 'Egna spår') + ' · ' + (user.active ? 'Aktiv' : 'Spärrad') + (user.id === currentUser.id ? ' · Din nyckel' : '');
+        const save = document.createElement('button'); save.textContent = 'Spara namn'; save.type = 'submit';
+        row.append(label,details,save);
+        row.onsubmit = async event => {
+          event.preventDefault(); save.disabled = true;
+          try {
+            await api('users/' + user.id, jsonOptions('PATCH',{name:input.value}));
+            dialog.querySelector('[role=status]').textContent = 'Namnet har sparats.';
+            input.value = input.value.trim(); input.setAttribute('aria-label','Namn för ' + input.value);
+          } catch(error) { dialog.querySelector('[role=status]').textContent = error.message; }
+          finally { save.disabled = false; }
+        };
+        if (user.active && user.id !== 'admin') {
+          const revoke = document.createElement('button'); revoke.type = 'button'; revoke.textContent = 'Spärra';
+          revoke.onclick = async () => {
+            revoke.disabled = true;
+            try { await api('users/' + user.id, {method:'DELETE'}); await listUsers(); }
+            catch(error) { dialog.querySelector('[role=status]').textContent = error.message; revoke.disabled = false; }
+          };
+          row.append(revoke);
+        }
         list.append(row);
       }
     }
@@ -102,7 +127,8 @@ if (currentUser.id === 'admin') {
         dialog.querySelector('[role=status]').textContent = 'Spara nyckeln nu, den visas bara en gång: ' + user.token;
         await listUsers();
       } catch (error) { dialog.querySelector('[role=status]').textContent = error.message; } finally { button.disabled = false; }
-    }; await listUsers();
+    };
+    try { await listUsers(); } catch(error) { dialog.querySelector('[role=status]').textContent = error.message; }
   };
 }
 document.querySelector('#downloadOriginals').onclick = async () => {

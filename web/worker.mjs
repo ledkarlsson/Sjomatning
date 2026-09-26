@@ -16,6 +16,10 @@ async function readJson(request, limit = 65536) {
   const bytes = new Uint8Array(size); let offset=0; for (const chunk of chunks) { bytes.set(chunk,offset); offset+=chunk.length; }
   return JSON.parse(new TextDecoder().decode(bytes));
 }
+async function adminIdentity(env) {
+  const row = await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('admin:name').first();
+  return {id:'admin', name:row ? JSON.parse(row.value) : 'Administratör', role:'all'};
+}
 async function authenticated(request, env) {
   if (!env.LIBRARY_PASSWORD) return null;
   // Mobile PWA requests carry their own key so a different browser tab's
@@ -24,13 +28,13 @@ async function authenticated(request, env) {
   if (authorization !== null) {
     const key = authorization.match(/^Bearer (\S{1,1024})$/)?.[1];
     if (!key) return null;
-    if (equal(await signature(env.LIBRARY_PASSWORD, key), await signature(env.LIBRARY_PASSWORD, env.LIBRARY_PASSWORD))) return {id:'admin',name:'Administratör',role:'all'};
+    if (equal(await signature(env.LIBRARY_PASSWORD, key), await signature(env.LIBRARY_PASSWORD, env.LIBRARY_PASSWORD))) return adminIdentity(env);
     return env.DB.prepare('SELECT id,name,role FROM users WHERE tokenHash=? AND active=1').bind(await tokenHash(key)).first();
   }
   const token = request.headers.get('Cookie')?.match(/(?:^|;\s*)session=([^;]+)/)?.[1] || '';
   const [id, expires, mac] = token.split('.');
   if (!(Number(expires) > Date.now() && Number(expires) < Date.now() + 604801000 && equal(mac || '', await signature(env.LIBRARY_PASSWORD, id + '.' + expires)))) return null;
-  if (id === 'admin') return { id, name:'Administratör', role:'all' };
+  if (id === 'admin') return adminIdentity(env);
   return env.DB.prepare('SELECT id,name,role FROM users WHERE id=? AND active=1').bind(id).first();
 }
 async function tokenHash(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))), b => b.toString(16).padStart(2,'0')).join(''); }
@@ -58,7 +62,7 @@ export default {
       if (path === '/api/session') return json({ ...user, storageReady:Boolean(env.FILES) });
       if (path.startsWith('/api/users')) {
         if (user.id !== 'admin') return json({ error:'Endast administratören kan hantera åtkomstnycklar.' }, 403);
-        if (path === '/api/users' && request.method === 'GET') return json((await env.DB.prepare('SELECT id,name,role,active FROM users').all()).results);
+        if (path === '/api/users' && request.method === 'GET') return json([{...await adminIdentity(env),active:1}, ...(await env.DB.prepare('SELECT id,name,role,active FROM users ORDER BY name,id').all()).results]);
         if (path === '/api/users' && request.method === 'POST') {
           const { name, role } = await readJson(request);
           if (typeof name !== 'string' || !name.trim() || name.length > 100 || !['all','own'].includes(role)) return json({ error:'Ogiltig användare.' }, 400);
@@ -66,8 +70,19 @@ export default {
           await env.DB.prepare('INSERT INTO users(id,name,role,tokenHash) VALUES(?,?,?,?)').bind(id,name,role,await tokenHash(token)).run();
           return json({ id,name,role,token }, 201);
         }
-        const id = path.match(/^\/api\/users\/([a-f0-9-]{36})$/)?.[1];
-        if (id && request.method === 'DELETE') { await env.DB.prepare('UPDATE users SET active=0 WHERE id=?').bind(id).run(); return json({ revoked:true }); }
+        const id = path.match(/^\/api\/users\/(admin|[a-f0-9-]{36})$/)?.[1];
+        if (id && request.method === 'PATCH') {
+          const {name} = await readJson(request);
+          if (typeof name !== 'string' || !name.trim() || name.length > 100) return json({error:'Ange ett namn med 1–100 tecken.'},400);
+          if (id === 'admin') {
+            await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('admin:name',JSON.stringify(name.trim())).run();
+          } else {
+            const result = await env.DB.prepare('UPDATE users SET name=? WHERE id=?').bind(name.trim(),id).run();
+            if (!result.meta.changes) return json({error:'Nyckeln finns inte.'},404);
+          }
+          return json({saved:true});
+        }
+        if (id && id !== 'admin' && request.method === 'DELETE') { await env.DB.prepare('UPDATE users SET active=0 WHERE id=?').bind(id).run(); return json({ revoked:true }); }
         return json({ error:'Ogiltig begäran.' }, 400);
       }
       if (path === '/api/level') {

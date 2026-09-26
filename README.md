@@ -47,6 +47,57 @@ Samma mätspår vid Granholmen, utan respektive med fältmanus:
 
 På längre sikt finns aktiv ruttnavigation, loggbok, flera instrumentanslutningar, vind/kompass/AIS, fler import- och exportformat samt nattläge och språkstöd kvar från [SeaClear-jämförelsen](seaclear2.txt). Full SeaClear-kompatibilitet är inte uppnådd. NMEA över nätverk, NMEA 2000 och fler sjöars vattenstånd kan utredas separat utifrån behov.
 
+## Arbetslista: observationer och sjökort från Jonas
+
+Jämförelsen gjordes 2026-09-26 mot koden i arbetsmappen, inklusive mobil-PWA:n, och Jonas Pythonverktyg. Den beskriver utvecklingsbehov, inte färdiga funktioner eller en verifiering av publicerad version. Referensmaterialet finns lokalt i `FrånJonas/`; hela mappen ska hållas utanför Git och är undantagen i `.gitignore`.
+
+Det största gapet är en positionskopplad observationsdagbok och möjligheten att skapa färdiga PDF-sjökort med mätdata. Dagens manusanteckningar är text placerad på en viss sida. En geografisk observation, exempelvis ”Gick på grund”, behöver i stället kunna visas på flera kartor och kopplas till ett mätpass.
+
+### Nuläge jämfört med Jonas
+
+| Funktion | Nuläge i Sjömätning / arbete som återstår |
+|---|---|
+| PDF-lager | PDF visas, men reglage för dess inbäddade lager saknas. Jonas 24 granskade resultat-PDF:er har lagren **Djuppunkter**, **Djupsiffror** och **Djup i fyrkanter**. Att visa/dölja våra separata mätspår är en annan funktion. |
+| Observationsdagbok | Manusanteckningar finns, men fristående observationer med koordinater, datum och mätpass saknas. |
+| Notera vid båten | Mobilen sparar GPS-position och manuellt djup med datum/tid. Fritextnotering och observationstyp saknas i det flödet. |
+| Mätmetod och kommentar | Mobilens djupunkter saknar strukturerad mätmetod, exempelvis stångmätning, manuellt ekolod eller uppskattning, samt kommentar. |
+| Tilläggningsplats | Observation med flera koordinater och en gemensam beskrivning saknas. |
+| OBS-format | Import och export av Jonas `.obs`-filer (`KodObservationFile`, version 1) saknas. |
+| PDF med mätdata | Nuvarande export innehåller manus och manusanteckningar, men inte separata mätspår, automatiska djupsiffror eller observationsförteckning. |
+| Djupfyrkanter | Automatisk ifyllnad av fältmanusets djupfyrkanter och antal återstående rutor saknas. |
+| Jonas kartkalibrering | GeoPDF och vår egen kalibrering stöds, men Jonas inbäddade `chart_metadata.json` läses inte. Hans kalibrering följer därför inte automatiskt med vid import. |
+
+Sjömätning har redan spårjämförelse, flera importformat, automatisk hämtning av vattenstånd, djupkorrigering, GPS/ekolod, manuell kartkalibrering, mobilinsamling, molnsynkning och simulator. Arbetet nedan ska bygga vidare på dessa funktioner. Se även [nuvarande manusanteckningar och PDF-export](docs/anteckningar.md).
+
+### Prioritet 1: observationsdagbok på dator och mobil
+
+- [ ] Inför en gemensam observationsmodell med stabilt id, position, datum/tid, typ, kommentar och koppling till mätpass. Mätpasset ska bära båt, område och vattenstånd med referens.
+- [ ] Lägg till **Notera här** vid aktuell GPS-position och möjlighet att välja position på kartan. Stöd fri notering utan krav på djup.
+- [ ] Stöd djupobservation med rådjup, mätmetod och kommentar; behåll underlaget för korrigering till normalvattenstånd.
+- [ ] Stöd tilläggningsplats som flera koordinater med gemensam beskrivning.
+- [ ] Visa observationerna både på kartan och i en daterad lista, med redigering och borttagning.
+- [ ] Spara offline och synka observationer, ändringar och borttagningar mellan berörda klienter utan dubbletter eller förlorade ändringar.
+
+Klart när en observation kan skapas på mobilen, finnas kvar efter omstart, synkas och visas/redigeras på datorn på olika kartunderlag. Befintliga manusanteckningar ska fortsatt fungera.
+
+### Prioritet 2: kompatibilitet med Jonas material
+
+- [ ] Läs och skriv `.obs` med typerna `note`, `depth` och `mooring`, inklusive positioner, kommentarer, mätmetoder och mätpassets uppgifter. Bevara okända tilläggsfält vid redigering/export där det är möjligt.
+- [ ] Hantera att äldre OBS-filer har datum för mätpasset men inte nödvändigtvis klockslag per observation; hitta inte på saknade tider.
+- [ ] Läs och validera `chart_metadata.json` ur PDF-filen och använd kalibreringen för rätt sida. Behåll befintligt stöd för GeoPDF och egen kalibrering.
+- [ ] Visa PDF-filens faktiska lager och låt användaren slå av/på dem, separat från appens mätspår.
+
+Klart när representativa OBS-filer kan importeras och exporteras utan förlust av observationsinnehåll, och Jonas kalibrerade PDF:er hamnar rätt på kartan med fungerande lagerreglage. Använd lokalt referensmaterial vid kontroll; lägg inte till `FrånJonas/` i Git.
+
+### Prioritet 3: samlad PDF-export och djupfyrkanter
+
+- [ ] Exportera valt sjökort med valda mätningar, korrigerade djup, djuppunkter och läsbara djupsiffror som separata PDF-lager.
+- [ ] Lägg till numrerade observationer på kartan och en observationsförteckning med datum, kommentarer, tilläggningsplatser och relevanta djupuppgifter.
+- [ ] Hantera flersidiga kartor och lägg till teckenförklaring; kontrollera läsbarhet och överlappande djupsiffror.
+- [ ] Lägg därefter till automatisk ifyllnad av djupfyrkanter samt sammanställning av ifyllda och återstående rutor.
+
+Klart när en exporterad PDF kan granskas fristående med valbara lager, spårbara djupvärden och hänvisningar mellan kartan och observationslistan. Importerade original ska förbli oförändrade.
+
 ## Utveckling och bygge
 
 ### Android GPS
