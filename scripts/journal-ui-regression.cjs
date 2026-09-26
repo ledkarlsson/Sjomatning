@@ -76,7 +76,9 @@ app.whenReady().then(async()=>{
  await wait(`!document.querySelector('[name=track]')`);
  const track=(await library.list())[0];assert.ok(track);const original=Buffer.from(track.bytes).toString();assert.ok(original.includes('2.3'));
  await rightClick();await run(`document.querySelector('[data-context-track]').click()`);await wait(`!!document.querySelector('[name=track]')`);
- await run(`const select=document.querySelector('[name=track]');select.value=${JSON.stringify(track.id)};select.dispatchEvent(new Event('change'));select.form.requestSubmit()`);
+ assert.equal(await run(`document.querySelector('[name=track]').value`),track.id);
+ assert.equal(await run(`document.querySelector('[data-name]').hidden`),true);
+ await run(`document.querySelector('[name=track]').form.requestSubmit()`);
  await wait(`!document.querySelector('[name=track]')`);
  const saved=(await library.list())[0];assert.equal(saved.edits.points.length,2);assert.equal(saved.edits.points[1].depth,null);assert.equal(Buffer.from(saved.bytes).toString(),original);
  console.log('PASS: map context menu dismissal, positioned event draft, saved new track and appended point with original preserved.');

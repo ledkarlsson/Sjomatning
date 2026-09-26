@@ -26,6 +26,8 @@ I desktop och det fullständiga webbgränssnittet kan du högerklicka på en pos
 - **Ny händelse här** öppnar en ny dagbokshändelse med positionen ifylld och aktuell tid. Skriv text och välj Spara.
 - **Lägg till spårpunkt här** låter dig skapa ett nytt spår eller lägga punkten sist i ett befintligt inläst, sparat spår. Rådjup är valfritt; befintliga spårets djupjustering gäller även den nya punkten. Manuella punkter får ingen påhittad mättid. Originalfilen bevaras när ett befintligt spår ändras.
 
+Det senast använda spåret väljs automatiskt efter en lyckad sparning, även efter omladdning, om spåret fortfarande är inläst. Valet sparas på enheten. Namnfältet visas bara när du väljer **Skapa nytt spår**.
+
 Spårpunkter sparas i biblioteket, lokalt på desktop och direkt i molnbiblioteket på webben. Händelser använder dagbokens lagring och synkning enligt nedan. Escape eller ett klick utanför menyn stänger den. Menyn är avstängd under kalibrering, manusredigering och val av dagboksposition.
 
 Desktop sparar till `observations/journal.json` i appens datamapp, med serialiserade ändringar och temporär fil före ersättning. Det fungerar utan internet. **Synka med webben** i dagboken skickar lokala ändringar och hämtar webbändringar; detta är separat från bibliotekets befintliga enkelriktade filsynkning. Samma krypterade webbnyckel används och kan anges vid första synkningen.

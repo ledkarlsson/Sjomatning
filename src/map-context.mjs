@@ -23,17 +23,19 @@ export function mountMapContext({canvas,toGeo,available,onEvent,onTrack,error}){
 }
 export function trackPointDialog(point,tracks,save){
  const dialog=document.createElement('dialog');dialog.className='journal-dialog';
- dialog.innerHTML='<form><h2>Lägg till spårpunkt</h2><p data-position></p><label>Spår<select name="track"><option value="">Skapa nytt spår</option></select></label><label data-name>Spårnamn<input name="name" maxlength="180" value="Manuellt spår" required></label><label>Rådjup i meter (valfritt)<input name="depth" type="number" min="0" max="12000" step="any"></label><p>Punkten placeras sist i spåret. Den är manuellt placerad, utan mättid. Befintliga spårets djupjustering gäller även denna punkt.</p><p role="status"></p><button type="submit">Spara spårpunkt</button> <button type="button" data-cancel>Avbryt</button></form>';
+ dialog.innerHTML='<form><h2>Lägg till spårpunkt</h2><p data-position></p><label>Spår<select name="track"><option value="">Skapa nytt spår</option></select></label><label data-name>Namn på det nya spåret<input name="name" maxlength="180" value="Manuellt spår" required></label><label>Rådjup i meter (valfritt)<input name="depth" type="number" min="0" max="12000" step="any"></label><p>Punkten placeras sist i spåret. Den är manuellt placerad, utan mättid. Befintliga spårets djupjustering gäller även denna punkt.</p><p role="status"></p><button type="submit">Spara spårpunkt</button> <button type="button" data-cancel>Avbryt</button></form>';
  const form=dialog.querySelector('form'),select=form.elements.track,status=dialog.querySelector('[role=status]');let busy=false;
  dialog.querySelector('[data-position]').textContent=`Latitud ${point.lat.toFixed(6)} · Longitud ${point.lon.toFixed(6)}`;
  for(const track of tracks){const option=document.createElement('option');option.value=track.id;option.textContent=track.name;select.append(option);}
+ try{const last=localStorage.getItem('lastManualTrack');if(tracks.some(track=>track.id===last))select.value=last;}catch{}
  select.onchange=()=>{dialog.querySelector('[data-name]').hidden=!!select.value;form.elements.name.required=!select.value;};
+ select.onchange();
  dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();dialog.oncancel=e=>{if(busy)e.preventDefault();};dialog.onclose=()=>dialog.remove();
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;
   const depth=form.elements.depth.value===''?null:Number(form.elements.depth.value),name=form.elements.name.value,id=select.value;
   busy=true;dialog.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);
-  try{await save({id,name,point:{...point,depth}});dialog.close();}catch(error){status.textContent=error.message;}finally{busy=false;dialog.querySelectorAll('button,input,select').forEach(el=>el.disabled=false);}
+  try{const savedId=await save({id,name,point:{...point,depth}});try{localStorage.setItem('lastManualTrack',savedId||id);}catch{}dialog.close();}catch(error){status.textContent=error.message;}finally{busy=false;dialog.querySelectorAll('button,input,select').forEach(el=>el.disabled=false);}
  };
  document.body.append(dialog);dialog.showModal();
 }

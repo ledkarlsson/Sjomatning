@@ -1783,6 +1783,7 @@ mountMapContext({canvas:overlay,toGeo:event=>{const p=canvasPoint(event);return 
     if(!id){
       const file=await window.sjomatning.createTrackPoint({name,point})
       await addLibraryFiles([file])
+      id=file.id
       const log=state.logs.find(log=>log.sourceId===file.id);if(log)log.visible=true
     }else{
       const log=state.logs.find(log=>log.sourceId===id),file=state.library.tracks.find(file=>file.id===id)
@@ -1792,6 +1793,6 @@ mountMapContext({canvas:overlay,toGeo:event=>{const p=canvasPoint(event);return 
       await window.sjomatning.updateLibraryFile(id,{edits})
       log.points=points;log.visible=true;file.edits=edits;pointIndexes.delete(log)
     }
-    renderLogs();renderFolder();drawOverlay();toast('Spårpunkten är sparad.')
+    renderLogs();renderFolder();drawOverlay();toast('Spårpunkten är sparad.');return id
   })
 }})
