@@ -46,7 +46,7 @@ export function mountJournal(api,getPosition,map={}) {
   async function reload(){const version=++loadVersion;const data=await api.journalList();if(version!==loadVersion)return;rows=data.rows;render();map.onRows?.(rows);}
   async function run(fn){if(busy)return;setBusy(true);try{await fn();}catch(error){status.textContent=error.message;}finally{setBusy(false);}}
   form.oninput=()=>{dirty=true;};
-  function open(row=null){if(busy||(!dialog.open&&!discard()))return;if(!dialog.open)dialog.showModal();select(row);status.textContent='';$('[data-location]').textContent=api.journalSync?'Sparas på datorn. Synka för att skicka och hämta händelser med din personliga webbnyckel.':'Sparas direkt i din personliga dagbok på webben. Internet krävs.';void run(reload);}
+  function open(row=null){if(busy||(!dialog.open&&!discard()))return false;if(!dialog.open)dialog.showModal();select(row);status.textContent='';$('[data-location]').textContent=api.journalSync?'Sparas på datorn. Synka för att skicka och hämta händelser med din personliga webbnyckel.':'Sparas direkt i din personliga dagbok på webben. Internet krävs.';void run(reload);return true;}
   host.querySelector('[data-open]').onclick=()=>open();
   $('[data-close]').onclick=()=>{if(!busy&&discard())dialog.close();};
   dialog.oncancel=event=>{if(busy||!discard())event.preventDefault();};
@@ -83,7 +83,7 @@ export function mountJournal(api,getPosition,map={}) {
   dialog.querySelectorAll('[data-export]').forEach(button=>button.onclick=()=>run(async()=>{if(dirty)throw new Error('Spara dina ändringar innan du exporterar.');const result=await api.journalExport(button.dataset.export);status.textContent=result?'Dagboken är exporterad.':'Exporten avbröts.';}));
   window.addEventListener('beforeunload',event=>{if(dirty||busy){event.preventDefault();event.returnValue='';}});
   void reload().catch(error=>{const message=document.createElement('p');message.textContent='Kunde inte läsa dagbokens kartmarkeringar: '+error.message;host.append(message);});
-  return {open:id=>open(rows.find(row=>row.event.id===id))};
+  return {open:id=>open(rows.find(row=>row.event.id===id)),createAt:point=>{if(!open())return;field('lat').value=point.lat.toFixed(6);field('lon').value=point.lon.toFixed(6);dirty=true;}};
 }
 function askKey(message){
   const dialog=document.createElement('dialog');dialog.className='journal-dialog';

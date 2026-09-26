@@ -19,6 +19,15 @@ Datum/tid visas och redigeras i enhetens lokala tidszon. Lagring och export anv�
 
 ## Spara och synka
 
+### Högerklicka i kartan
+
+I desktop och det fullständiga webbgränssnittet kan du högerklicka på en position:
+
+- **Ny händelse här** öppnar en ny dagbokshändelse med positionen ifylld och aktuell tid. Skriv text och välj Spara.
+- **Lägg till spårpunkt här** låter dig skapa ett nytt spår eller lägga punkten sist i ett befintligt inläst, sparat spår. Rådjup är valfritt; befintliga spårets djupjustering gäller även den nya punkten. Manuella punkter får ingen påhittad mättid. Originalfilen bevaras när ett befintligt spår ändras.
+
+Spårpunkter sparas i biblioteket, lokalt på desktop och direkt i molnbiblioteket på webben. Händelser använder dagbokens lagring och synkning enligt nedan. Escape eller ett klick utanför menyn stänger den. Menyn är avstängd under kalibrering, manusredigering och val av dagboksposition.
+
 Desktop sparar till `observations/journal.json` i appens datamapp, med serialiserade ändringar och temporär fil före ersättning. Det fungerar utan internet. **Synka med webben** i dagboken skickar lokala ändringar och hämtar webbändringar; detta är separat från bibliotekets befintliga enkelriktade filsynkning. Samma krypterade webbnyckel används och kan anges vid första synkningen.
 
 Webbgränssnittet sparar direkt på servern och kräver internet. **Läs in igen** hämtar ändringar från andra enheter. Varje nyckel har en egen dagbok, även för behörigheten Hela biblioteket och admin. Ersätt nyckel bevarar ägar-id och därmed dagboken. Desktopdagboken knyts till kontot vid första lyckade API-kontakten; byte till ett annat konto nekas för att undvika att händelser laddas upp till fel person.

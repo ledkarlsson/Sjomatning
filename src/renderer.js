@@ -1,3 +1,5 @@
+import { mountMapContext, trackPointDialog } from './map-context.mjs'
+import { manualTrackFile } from './manual-track.mjs'
 import { mountJournal } from './journal-ui.mjs'
 import { readRasterChart, rasterPixels } from './raster-chart.mjs'
 import { buildPointIndex, countPoints, viewPoints } from './track-view.mjs'
@@ -1772,3 +1774,24 @@ overlay.addEventListener('click',event=>{
   const nearest=journalMarkers.map(marker=>({...marker,distance:Math.hypot(marker.x-p.x,marker.y-p.y)*state.scale})).filter(marker=>marker.distance<=14).sort((a,b)=>a.distance-b.distance)[0]
   if(nearest){event.preventDefault();event.stopImmediatePropagation();journalController?.open(nearest.id)}
 },true)
+
+mountMapContext({canvas:overlay,toGeo:event=>{const p=canvasPoint(event);return pixelToGeo(p.x,p.y)},available:()=>!journalPick&&!state.armed&&!annotationEditor.file,onEvent:point=>journalController?.createAt(point),error:toast,onTrack:point=>{
+  const tracks=state.logs.filter(log=>log.sourceId).map(log=>({id:log.sourceId,name:log.name}))
+  trackPointDialog(point,tracks,async({id,name,point})=>{
+    manualTrackFile({name:id?'Spårpunkt':name,point})
+    await Promise.all(pendingLibraryWrites)
+    if(!id){
+      const file=await window.sjomatning.createTrackPoint({name,point})
+      await addLibraryFiles([file])
+      const log=state.logs.find(log=>log.sourceId===file.id);if(log)log.visible=true
+    }else{
+      const log=state.logs.find(log=>log.sourceId===id),file=state.library.tracks.find(file=>file.id===id)
+      if(!log||!file)throw new Error('Spåret finns inte längre.')
+      const points=[...log.points,{...point,speed:null,date:'',time:''}]
+      const edits=structuredClone({points,waterLevel:log.waterLevel,waterLevelSource:log.waterLevelSource,waterLevelDate:log.waterLevelDate,correction:log.correction,depthAdjustment:log.depthAdjustment||0,pruneDistance:log.pruneDistance||0})
+      await window.sjomatning.updateLibraryFile(id,{edits})
+      log.points=points;log.visible=true;file.edits=edits;pointIndexes.delete(log)
+    }
+    renderLogs();renderFolder();drawOverlay();toast('Spårpunkten är sparad.')
+  })
+}})

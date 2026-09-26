@@ -54,6 +54,11 @@ async function choose(folder = false) {
 let records = [], app;
 const journalPendingWrites = new Map();
 window.sjomatning = {
+  createTrackPoint: async value => {
+    const {manualTrackFile}=await import('./src/manual-track.mjs');
+    const file=manualTrackFile(value);
+    return (await upload([new File([file.content],file.name,{type:'text/csv'})]))[0];
+  },
   journalList: async () => ({rows:await api('journal')}),
   journalSave: async value => {
     const key=JSON.stringify(value);

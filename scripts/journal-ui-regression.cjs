@@ -5,7 +5,10 @@ app.setPath('userData',path.resolve('tmp/journal-ui-'+process.pid));
 app.whenReady().then(async()=>{
  const folder=app.getPath('userData');const store=createJournalStore(path.join(folder,'journal.json'));
  ipcMain.handle('journal:list',()=>store.list());ipcMain.handle('journal:save',(_,v)=>store.save(v));
- ipcMain.handle('library:list',()=>[]);ipcMain.handle('files:launch-pdf',()=>null);ipcMain.handle('app:info',()=>({version:'test',buildDate:'2026-09-26'}));ipcMain.handle('roxen:water-level',()=>({ok:false}));
+ const library=require('../src/library-store').createLibraryStore(path.join(folder,'library'));
+ ipcMain.handle('library:list',()=>library.list());ipcMain.handle('library:update',(_,id,value)=>library.update(id,value));
+ ipcMain.handle('tracks:create-point',async(_,value)=>{const file=(await import('../src/manual-track.mjs')).manualTrackFile(value);await library.persist([{name:file.name,bytes:Buffer.from(file.content)}]);return (await library.list())[0];});
+ ipcMain.handle('files:launch-pdf',()=>null);ipcMain.handle('app:info',()=>({version:'test',buildDate:'2026-09-26'}));ipcMain.handle('roxen:water-level',()=>({ok:false}));
  let exported;
  ipcMain.handle('journal:export',async(_,format)=>{const {rows}=await store.list();if(format==='pdf'){const {journalPdf}=await import('../src/journal-pdf.mjs');exported=path.resolve('tmp/journal-preview.pdf');await fs.writeFile(exported,await journalPdf(rows,require('pdf-lib')));}else{exported=(await import('../src/journal-model.mjs')).exportJournal(rows,format);}return exported;});
  await session.defaultSession.protocol.handle('https',()=>new Response('',{status:404}));
@@ -57,6 +60,27 @@ app.whenReady().then(async()=>{
  await win.loadFile(path.resolve('src/index.html'));await wait(`!!document.querySelector('[data-open]')`);await run(`document.querySelector('[data-open]').click()`);await wait(`document.querySelectorAll('.journal-entry').length===13 && !document.querySelector('[name=text]').disabled`);
  console.log('PASS: diary UI create, edit, automatic timestamp, changed timestamp, persistence, JSON and PDF export.');
 
+ await run(`document.querySelector('[data-close]').click()`);
+ const rightClick=()=>run(`(()=>{const c=document.querySelector('#overlayCanvas'),r=c.getBoundingClientRect();c.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.left+r.width*.6,clientY:r.top+r.height*.6}))})()`);
+ await rightClick();assert.equal(await run(`document.querySelector('.map-context-menu').hidden`),false);
+ await run(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+ assert.equal(await run(`document.querySelector('.map-context-menu').hidden`),true);
+ await rightClick();await run(`document.querySelector('[data-context-event]').click()`);
+ await wait(`document.querySelector('.journal-dialog').open && !document.querySelector('[name=text]').disabled`);
+ assert.ok(await run(`Number.isFinite(Number(document.querySelector('[name=lat]').value)) && document.querySelector('[name=lat]').value!==''`));
+ assert.equal((await store.list()).rows.length,13);
+ await run(`window.confirm=()=>true;document.querySelector('[data-close]').click()`);
+ await rightClick();await run(`document.querySelector('[data-context-track]').click()`);
+ await wait(`!!document.querySelector('[name=track]')`);
+ await run(`document.querySelector('[name=name]').value='Högerklicksspår';document.querySelector('[name=track]').form.elements.depth.value='2.3';document.querySelector('[name=track]').form.requestSubmit()`);
+ await wait(`!document.querySelector('[name=track]')`);
+ const track=(await library.list())[0];assert.ok(track);const original=Buffer.from(track.bytes).toString();assert.ok(original.includes('2.3'));
+ await rightClick();await run(`document.querySelector('[data-context-track]').click()`);await wait(`!!document.querySelector('[name=track]')`);
+ await run(`const select=document.querySelector('[name=track]');select.value=${JSON.stringify(track.id)};select.dispatchEvent(new Event('change'));select.form.requestSubmit()`);
+ await wait(`!document.querySelector('[name=track]')`);
+ const saved=(await library.list())[0];assert.equal(saved.edits.points.length,2);assert.equal(saved.edits.points[1].depth,null);assert.equal(Buffer.from(saved.bytes).toString(),original);
+ console.log('PASS: map context menu dismissal, positioned event draft, saved new track and appended point with original preserved.');
+
  // Exercise the built browser adapter and the same editor in the real web shell.
  const http=require('node:http');
  const server=http.createServer(async(req,res)=>{
@@ -65,6 +89,10 @@ app.whenReady().then(async()=>{
    const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
    if(route==='/api/session')return json({id:'ui-user',name:'Testdagbok',role:'own',storageReady:true});
    if(route==='/api/settings')return json({});
+   if(route==='/api/files'&&req.method==='POST'){
+    const chunks=[];for await(const chunk of req)chunks.push(chunk);const bytes=Buffer.concat(chunks),name=new URL(req.url,'http://localhost').searchParams.get('name');
+    await library.persist([{name,bytes}]);const id=require('node:crypto').createHash('sha256').update(bytes).digest('hex');return json((await library.list()).find(file=>file.id===id));
+   }
    if(route==='/api/files')return json([]);
    if(route==='/api/level')return json({ok:false});
    if(route==='/api/journal')return json((await store.list()).rows.map(r=>({...r,dirty:false})));
@@ -107,6 +135,12 @@ app.whenReady().then(async()=>{
   assert.equal((await store.list()).rows.filter(r=>!r.deleted).length,13);
   assert.equal(await run(`JSON.parse(document.querySelector('#overlayCanvas').dataset.journalMarkers).some(m=>m.id===${JSON.stringify(webEvent.id)})`),false);
   console.log('PASS: browser journal create, edit time/text, PDF download and deletion.');
+  await run(`document.querySelector('[data-close]').click()`);await rightClick();await run(`document.querySelector('[data-context-track]').click()`);
+  await wait(`!!document.querySelector('[name=track]')`);
+  await run(`document.querySelector('[name=name]').value='Webbspår';document.querySelector('[name=track]').form.elements.depth.value='0';document.querySelector('[name=track]').form.requestSubmit()`);
+  await wait(`!document.querySelector('[name=track]')`);
+  const webTrack=(await library.list()).find(file=>file.name==='Webbspår.csv');assert.ok(webTrack);assert.ok(Buffer.from(webTrack.bytes).toString().trim().endsWith(',0'));
+  console.log('PASS: browser context menu uploads manual track with zero depth.');
  }finally{server.close();}
  app.quit();
 }).catch(error=>{console.error(error);app.exit(1)});

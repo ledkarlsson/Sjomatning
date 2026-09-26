@@ -178,6 +178,13 @@ ipcMain.handle('journal:export', async (_event, format) => {
   await fs.writeFile(result.filePath,bytes)
   return result.filePath
 })
+ipcMain.handle('tracks:create-point',async(_event,value)=>{
+  const {manualTrackFile}=await import('./manual-track.mjs')
+  const file=manualTrackFile(value),bytes=Buffer.from(file.content,'utf8')
+  const id=crypto.createHash('sha256').update(bytes).digest('hex')
+  await libraryStore.persist([{name:file.name,bytes}])
+  return (await libraryStore.list()).find(record=>record.id===id)
+})
 ipcMain.handle('library:remove', (_event, id) => libraryStore.remove(id))
 
 ipcMain.handle('files:launch-pdf', async () => {
