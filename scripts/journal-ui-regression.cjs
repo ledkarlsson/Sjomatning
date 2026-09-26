@@ -78,6 +78,11 @@ app.whenReady().then(async()=>{
  await rightClick();await run(`document.querySelector('[data-context-track]').click()`);await wait(`!!document.querySelector('[name=track]')`);
  assert.equal(await run(`document.querySelector('[name=track]').value`),track.id);
  assert.equal(await run(`document.querySelector('[data-name]').hidden`),true);
+ assert.equal(await run(`getComputedStyle(document.querySelector('[data-name]')).display`),'none');
+ await run(`document.querySelector('[name=track]').value='';document.querySelector('[name=track]').dispatchEvent(new Event('change'))`);
+ assert.notEqual(await run(`getComputedStyle(document.querySelector('[data-name]')).display`),'none');
+ await run(`document.querySelector('[name=track]').value=${JSON.stringify(track.id)};document.querySelector('[name=track]').dispatchEvent(new Event('change'))`);
+ assert.equal(await run(`getComputedStyle(document.querySelector('[data-name]')).display`),'none');
  await run(`document.querySelector('[name=track]').form.requestSubmit()`);
  await wait(`!document.querySelector('[name=track]')`);
  const saved=(await library.list())[0];assert.equal(saved.edits.points.length,2);assert.equal(saved.edits.points[1].depth,null);assert.equal(Buffer.from(saved.bytes).toString(),original);
