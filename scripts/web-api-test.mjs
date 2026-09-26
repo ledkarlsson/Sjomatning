@@ -8,6 +8,7 @@ try {
   const db = await mf.getD1Database('DB');
   for (const sql of (await readFile('web/migrations/0001_library.sql','utf8')).split(';').filter(s => s.trim())) await db.prepare(sql).run();
   for (const sql of (await readFile('web/migrations/0002_sync.sql','utf8')).split(';').filter(s => s.trim())) await db.prepare(sql).run();
+  for (const sql of (await readFile('web/migrations/0003_journal.sql','utf8')).split(';').filter(s => s.trim())) await db.prepare(sql).run();
   const call = (path, method='GET', body, cookie, extra={}) => mf.dispatchFetch('https://test.local/api/' + path, { method, headers:{ Origin:'https://test.local', ...(cookie ? {Cookie:cookie} : {}), ...extra }, ...(body === undefined ? {} : {body:typeof body === 'string' ? body : JSON.stringify(body)}) });
   const login = async password => { const response = await call('login','POST',{password}); assert.equal(response.status,200); return response.headers.get('set-cookie').split(';')[0]; };
   assert.equal((await call('files')).status,401);
@@ -96,6 +97,7 @@ try {
   assert.equal(restored.active,1); assert.equal(restored.name,'Spärrad båt'); await login(restored.token);
   const keysAfter=await (await call('users','GET',undefined,admin)).json();
   assert.ok(keysAfter.every(key=>!('token' in key)&&!('tokenHash' in key)));
+  await (await import('./journal-api-checks.mjs')).checkJournal(mf,restored.token,replacement.token);
   console.log('PASS: inloggning, ägarskap, roller, filer, CSRF, spärrade nycklar samt idempotent synk isolerad per användare.');
 } finally { await mf.dispose(); }
 

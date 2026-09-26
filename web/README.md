@@ -55,3 +55,9 @@ Verifierat: 50 befintliga tester, separat API-integrationstest med riktiga lokal
 ## Mobilapp (PWA)
 
 Gemensam mobilapp för Android och iPhone på /mobile/: GPS-punkter, lokala fältmanus och uppstartssynkning. Se [mobilappens dokumentation](mobile/README.md).
+
+## Observationsdagbok
+
+**Observationsdagbok** öppnar den personliga dagboken. Skapa och redigera händelser med datum/tid och valfri position, och exportera JSON, CSV eller PDF. Datorns **Synka med webben** i dagboken hämtar och skickar ändringar med revisionskontroll. Dagboken är separat från filbiblioteket och hålls privat per nyckel, även för admin. Se [användning, konflikter och export](../docs/observationsdagbok.md).
+
+Före publicering av denna funktion ska D1-migrationen `0003_journal.sql` tillämpas tillsammans med tidigare migrationer, exempelvis med `npx wrangler d1 migrations apply sjomatning-library --remote --config web/wrangler.jsonc` för produktion. Kontrollera målmiljön före körning; lokal provning använder `--local`.

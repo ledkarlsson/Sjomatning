@@ -1,3 +1,4 @@
+import { mountJournal } from './journal-ui.mjs'
 import { readRasterChart, rasterPixels } from './raster-chart.mjs'
 import { buildPointIndex, countPoints, viewPoints } from './track-view.mjs'
 import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.mjs'
@@ -1718,3 +1719,9 @@ function manuscriptImage(file) {
   file.annotatedRaster={source:file.mapRaster,notes:file.annotations,canvas}
   return canvas
 }
+
+mountJournal(window.sjomatning,async()=>{
+  if(state.live?.position && Date.now()-state.live.positionAt<5000)return state.live.position
+  if(!navigator.geolocation)return null
+  return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(p=>resolve({lat:p.coords.latitude,lon:p.coords.longitude}),()=>reject(new Error('GPS-position kunde inte hämtas.')),{enableHighAccuracy:true,maximumAge:0,timeout:10000}))
+})

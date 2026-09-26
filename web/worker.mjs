@@ -1,3 +1,4 @@
+import { journalApi } from './journal-api.mjs';
 import { timingSafeEqual } from 'node:crypto';
 import levels from '../src/roxen-level.js';
 import { validateEdits, validateNotes } from './validation.mjs';
@@ -61,6 +62,7 @@ export default {
       if (path === '/api/logout') return new Response('{}', { headers: { 'Set-Cookie': 'session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0' } });
       const user = await authenticated(request, env);
       if (!user) return json({ error: 'Logga in för att öppna molnbiblioteket.' }, 401);
+      if (path === '/api/journal' || path.startsWith('/api/journal/')) return await journalApi(request,env,user,readJson);
       if (path === '/api/session') return json({ ...user, storageReady:Boolean(env.FILES) });
       if (path.startsWith('/api/users')) {
         if (user.id !== 'admin') return json({ error:'Endast administratören kan hantera åtkomstnycklar.' }, 403);

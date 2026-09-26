@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('sjomatning', {
+  journalList: () => ipcRenderer.invoke('journal:list'),
+  journalSave: value => ipcRenderer.invoke('journal:save', value),
+  journalResolve: (id,choice) => ipcRenderer.invoke('journal:resolve',id,choice),
+  journalSync: options => ipcRenderer.invoke('journal:sync',options),
+  journalExport: format => ipcRenderer.invoke('journal:export',format),
   updateLibraryFile: (id, changes) => ipcRenderer.invoke('library:update', id, changes),
   openLibrary: () => ipcRenderer.invoke('files:open-library'),
   openPdf: () => ipcRenderer.invoke('files:open-pdf'),

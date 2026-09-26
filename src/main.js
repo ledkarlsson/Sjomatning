@@ -12,6 +12,8 @@ let cloudSyncBusy = false
 const packageMetadata = require('../package.json')
 const { expandChartIndexes: expandBsbIndexes } = require('./bsb-index')
 const expandChartIndexes = files => expandBsbIndexes(files, readSurveyFile)
+const { createJournalStore } = require('./journal-store')
+let journalStore
 let libraryStore
 const liveSessions = new Map()
 const { recoverSessions, appendSample } = require('./live-storage')
@@ -157,6 +159,25 @@ ipcMain.handle('library:sync-cloud', async (event, {token, calibrations = {}} = 
     })
   } finally { cloudSyncBusy = false }
 })
+ipcMain.handle('journal:list', () => journalStore.list())
+ipcMain.handle('journal:save', (_event, value) => journalStore.save(value))
+ipcMain.handle('journal:resolve', (_event, id, choice) => journalStore.resolve(id,choice))
+ipcMain.handle('journal:sync', async (_event, {token} = {}) => {
+  const credentials=createCloudCredentials(path.join(app.getPath('userData'),'cloud-key.bin'),safeStorage)
+  return syncWithSavedKey(credentials,journalStore.sync,{token})
+})
+ipcMain.handle('journal:export', async (_event, format) => {
+  if(!['json','csv','pdf'].includes(format))throw new Error('Okänt exportformat.')
+  const {rows}=await journalStore.list()
+  const {exportJournal}=await import('./journal-model.mjs')
+  const bytes=format==='pdf'?await (await import('./journal-pdf.mjs')).journalPdf(rows,require('pdf-lib')):exportJournal(rows,format)
+  const result=await dialog.showSaveDialog({title:'Exportera observationsdagbok',defaultPath:'observationsdagbok.'+format,filters:[{name:format.toUpperCase(),extensions:[format]}]})
+  if(result.canceled||!result.filePath)return null
+  const relative=path.relative(app.getPath('userData'),path.resolve(result.filePath))
+  if(!relative||(!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative)))throw new Error('Exportera utanför appens datamapp.')
+  await fs.writeFile(result.filePath,bytes)
+  return result.filePath
+})
 ipcMain.handle('library:remove', (_event, id) => libraryStore.remove(id))
 
 ipcMain.handle('files:launch-pdf', async () => {
@@ -244,6 +265,7 @@ ipcMain.handle('live:stop', async (_event, id) => {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
+  journalStore = createJournalStore(path.join(app.getPath('userData'),'observations','journal.json'))
   libraryStore = createLibraryStore(path.join(app.getPath('userData'), 'survey-library'))
   await recoverSessions(path.join(app.getPath('userData'), 'measurements'), file => libraryStore.persist([file])).catch(error => dialog.showErrorBox('Kunde inte återställa mätning', error.message))
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => permission === 'serial')

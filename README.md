@@ -13,6 +13,7 @@ En Windowsapp för att samla in, visa och jämföra djupmätningar, med Roxen so
 - **GPS och ekolod via USB:** NMEA 0183 med GGA/RMC och DPT/DBT. Visa båt, position, fart och kurs över grund, med följ-båt-läge och separat status för GPS och djup. GPS fungerar även utan ekolod.
 - **Mätning och återställning:** anslutning och mätstart är separata. Spara NMEA-logg och CSV löpande, markera gamla instrumentvärden och återställ kompletta CSV-rader från avbrutna sessioner vid nästa start. Återanslutning sker manuellt.
 - **Simulator:** prova en båttur på Roxen med eller utan ekolod och med valbar hastighet på simuleringen.
+- **Observationsdagbok:** skriv och redigera händelser med automatiskt, ändringsbart datum/klockslag och valfri GPS-position. Spara offline på datorn, synka åt båda håll med din personliga webbdagbok och exportera JSON, CSV eller PDF. Se [dagbokens arbetsflöde](docs/observationsdagbok.md).
 - **Anteckningar:** placera och redigera text i fältmanus, spara automatiskt och exportera en ny PDF med anteckningarna.
 - **Windowsinstallation och uppdateringar:** installationsprogram och automatisk hämtning av nya versioner, med versionsnummer och byggdatum i appen.
 
@@ -58,18 +59,20 @@ Det största gapet är en positionskopplad observationsdagbok och möjligheten a
 | Funktion | Nuläge i Sjömätning / arbete som återstår |
 |---|---|
 | PDF-lager | PDF visas, men reglage för dess inbäddade lager saknas. Jonas 24 granskade resultat-PDF:er har lagren **Djuppunkter**, **Djupsiffror** och **Djup i fyrkanter**. Att visa/dölja våra separata mätspår är en annan funktion. |
-| Observationsdagbok | Manusanteckningar finns, men fristående observationer med koordinater, datum och mätpass saknas. |
-| Notera vid båten | Mobilen sparar GPS-position och manuellt djup med datum/tid. Fritextnotering och observationstyp saknas i det flödet. |
+| Observationsdagbok | Fria händelser med redigerbar tid och valfri position finns nu på desktop/webb. Strukturerade observationstyper och koppling till mätpass återstår. |
+| Notera vid båten | Desktopdagboken kan hämta aktuell GPS-position. Mobil-PWA:n sparar position och manuellt djup men saknar fortfarande dagboksflödet. |
 | Mätmetod och kommentar | Mobilens djupunkter saknar strukturerad mätmetod, exempelvis stångmätning, manuellt ekolod eller uppskattning, samt kommentar. |
 | Tilläggningsplats | Observation med flera koordinater och en gemensam beskrivning saknas. |
 | OBS-format | Import och export av Jonas `.obs`-filer (`KodObservationFile`, version 1) saknas. |
-| PDF med mätdata | Nuvarande export innehåller manus och manusanteckningar, men inte separata mätspår, automatiska djupsiffror eller observationsförteckning. |
+| PDF med mätdata | En separat PDF med dagbokshändelser finns nu. Manusets PDF-export saknar fortfarande separata mätspår, automatiska djupsiffror och numrerade hänvisningar till observationer. |
 | Djupfyrkanter | Automatisk ifyllnad av fältmanusets djupfyrkanter och antal återstående rutor saknas. |
 | Jonas kartkalibrering | GeoPDF och vår egen kalibrering stöds, men Jonas inbäddade `chart_metadata.json` läses inte. Hans kalibrering följer därför inte automatiskt med vid import. |
 
 Sjömätning har redan spårjämförelse, flera importformat, automatisk hämtning av vattenstånd, djupkorrigering, GPS/ekolod, manuell kartkalibrering, mobilinsamling, molnsynkning och simulator. Arbetet nedan ska bygga vidare på dessa funktioner. Se även [nuvarande manusanteckningar och PDF-export](docs/anteckningar.md).
 
 ### Prioritet 1: observationsdagbok på dator och mobil
+
+En första dagbok för fria händelser finns nu på desktop och webben: redigerbar tid, valfri punktposition, lokal lagring, synkning med konflikthantering och JSON/CSV/PDF-export. Punkterna nedan avser återstående utbyggnad med strukturerade observationstyper, mätpass och mobil-PWA; Jonas OBS-format ingår ännu inte.
 
 - [ ] Inför en gemensam observationsmodell med stabilt id, position, datum/tid, typ, kommentar och koppling till mätpass. Mätpasset ska bära båt, område och vattenstånd med referens.
 - [ ] Lägg till **Notera här** vid aktuell GPS-position och möjlighet att välja position på kartan. Stöd fri notering utan krav på djup.

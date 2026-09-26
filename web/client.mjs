@@ -52,7 +52,24 @@ async function choose(folder = false) {
   return upload(files.filter(file => /\.(pdf|kap|wci|bsb|csv|txt|trc|sl2|sl3)$/i.test(file.name)));
 }
 let records = [], app;
+const journalPendingWrites = new Map();
 window.sjomatning = {
+  journalList: async () => ({rows:await api('journal')}),
+  journalSave: async value => {
+    const key=JSON.stringify(value);
+    if(!journalPendingWrites.has(key))journalPendingWrites.set(key,crypto.randomUUID());
+    const result=await api('journal/'+value.event.id,jsonOptions('PUT',{event:value.event,baseRevision:value.baseRevision,deleted:value.deleted,mutation:journalPendingWrites.get(key)}));
+    journalPendingWrites.delete(key);return result;
+  },
+  journalExport: async format => {
+    const rows=await api('journal');
+    if(format==='pdf'){
+      const {journalPdf}=await import('./src/journal-pdf.mjs');
+      return download(await journalPdf(rows,await import('./pdf-lib.mjs')),'observationsdagbok.pdf','application/pdf');
+    }
+    const {exportJournal}=await import('./src/journal-model.mjs');
+    return download(exportJournal(rows,format),'observationsdagbok.'+format,format==='json'?'application/json':'text/csv');
+  },
   openLibrary: () => choose(), openPdf: async () => (await choose())[0], openLogs: () => choose(),
   openFolder: async () => ({ name:'Molnbibliotek', path:'cloud', files:await choose(true) }),
   scanDroppedEntries: async files => ({ files:await upload(files), folders:[] }),

@@ -13,6 +13,7 @@
     "web:dev": "npm run web:build && wrangler dev --config web/wrangler.jsonc",
     "web:deploy": "npm run web:build && wrangler deploy --config web/wrangler.jsonc",
     "test:mobile-ui": "npm run web:build && electron scripts/mobile-ui-regression.cjs",
+    "test:journal-ui": "electron scripts/journal-ui-regression.cjs",
     "test:web-api": "node scripts/web-api-test.mjs",
     "start": "electron .",
     "package": "electron-builder --dir",

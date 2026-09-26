@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, copyFile, cp } from 'node:fs/promises';
 const root = new URL('../', import.meta.url), output = new URL('./dist/', import.meta.url);
 await mkdir(new URL('src/', output), { recursive: true });
-const modules = ['styles.css', 'renderer.js', 'raster-chart.mjs', 'track-view.mjs', 'track-parser.mjs', 'web-map.mjs', 'track-processing.mjs', 'nmea-simulator.mjs', 'nmea-parser.mjs'];
+const modules = ['journal-ui.mjs', 'journal-model.mjs', 'journal-pdf.mjs', 'styles.css', 'renderer.js', 'raster-chart.mjs', 'track-view.mjs', 'track-parser.mjs', 'web-map.mjs', 'track-processing.mjs', 'nmea-simulator.mjs', 'nmea-parser.mjs'];
 for (const file of modules) await copyFile(new URL('src/' + file, root), new URL('src/' + file, output));
 let renderer = await readFile(new URL('src/renderer.js', output), 'utf8');
 renderer += '\nexport { state, addLibraryFiles, loadRoxenMap, canvasPoint, pixelToGeo, geoToPixel, drawOverlay, renderFolder, renderLogs, toast };\n';
