@@ -109,6 +109,19 @@ if (currentUser.id === 'admin') {
           } catch(error) { dialog.querySelector('[role=status]').textContent = error.message; }
           finally { save.disabled = false; }
         };
+        if (user.id !== 'admin') {
+          const replace = document.createElement('button'); replace.type = 'button'; replace.textContent = 'Ersätt nyckel';
+          replace.onclick = async () => {
+            if (!confirm('Ersätt nyckeln för ' + input.value + '? Den gamla nyckeln och dess sessioner slutar fungera. Den nya nyckeln blir aktiv och visas bara en gång. Namn, behörighet och filer behålls.')) return;
+            replace.disabled = true;
+            try {
+              const replacement = await api('users/' + user.id + '/replace',{method:'POST'});
+              dialog.querySelector('[role=status]').textContent = 'Spara den nya nyckeln nu, den visas bara en gång: ' + replacement.token;
+              try { await listUsers(); } catch(error) { dialog.querySelector('[role=status]').textContent += ' Listan kunde inte uppdateras: ' + error.message; }
+            } catch(error) { dialog.querySelector('[role=status]').textContent = error.message; replace.disabled = false; }
+          };
+          row.append(replace);
+        }
         if (user.active && user.id !== 'admin') {
           const revoke = document.createElement('button'); revoke.type = 'button'; revoke.textContent = 'Spärra';
           revoke.onclick = async () => {

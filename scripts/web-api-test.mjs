@@ -73,6 +73,29 @@ try {
   const otherOwner=await (await uploadSynced(admin)).json(); assert.notEqual(otherOwner.id,synced.id);
   await call('files/'+synced.id,'PATCH',{name:'updated.csv'},bc);
   const bFiles=await (await call('files','GET',undefined,bc)).json(); assert.equal(bFiles[0].syncId,syncId); assert.equal(bFiles[0].owner,b.id);
+  // Rotation preserves ownership but invalidates both old tokens and sessions.
+  for (const cookie of [bc,rc]) assert.equal((await call('users/'+b.id+'/replace','POST',undefined,cookie)).status,403);
+  assert.equal((await call('users/'+b.id+'/replace','POST')).status,401);
+  const csrfRotation=await mf.dispatchFetch('https://test.local/api/users/'+b.id+'/replace',{method:'POST',headers:{Cookie:admin,Origin:'https://evil.local'}});
+  assert.equal(csrfRotation.status,403);
+  assert.equal((await call('users/admin/replace','POST',undefined,admin)).status,400);
+  assert.equal((await call('users/00000000-0000-0000-0000-000000000000/replace','POST',undefined,admin)).status,404);
+  const replacementResponse=await call('users/'+b.id+'/replace','POST',undefined,admin);
+  assert.equal(replacementResponse.status,200);
+  const replacement=await replacementResponse.json();
+  assert.equal(replacement.id,b.id); assert.equal(replacement.name,b.name); assert.equal(replacement.role,b.role);
+  assert.notEqual(replacement.token,b.token); assert.ok(!('tokenHash' in replacement));
+  assert.equal((await call('login','POST',{password:b.token})).status,401);
+  assert.equal((await call('session','GET',undefined,bc)).status,401);
+  assert.equal((await mobile('session',b.token)).status,401);
+  const replacementCookie=await login(replacement.token);
+  assert.equal((await (await mobile('session',replacement.token)).json()).id,b.id);
+  const preservedFiles=await (await call('files','GET',undefined,replacementCookie)).json();
+  assert.equal(preservedFiles[0].id,synced.id); assert.equal(preservedFiles[0].name,'updated.csv');
+  const restored=await (await call('users/'+a.id+'/replace','POST',undefined,admin)).json();
+  assert.equal(restored.active,1); assert.equal(restored.name,'Spärrad båt'); await login(restored.token);
+  const keysAfter=await (await call('users','GET',undefined,admin)).json();
+  assert.ok(keysAfter.every(key=>!('token' in key)&&!('tokenHash' in key)));
   console.log('PASS: inloggning, ägarskap, roller, filer, CSRF, spärrade nycklar samt idempotent synk isolerad per användare.');
 } finally { await mf.dispose(); }
 

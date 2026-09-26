@@ -33,9 +33,11 @@ async function authenticated(request, env) {
   }
   const token = request.headers.get('Cookie')?.match(/(?:^|;\s*)session=([^;]+)/)?.[1] || '';
   const [id, expires, mac] = token.split('.');
-  if (!(Number(expires) > Date.now() && Number(expires) < Date.now() + 604801000 && equal(mac || '', await signature(env.LIBRARY_PASSWORD, id + '.' + expires)))) return null;
-  if (id === 'admin') return adminIdentity(env);
-  return env.DB.prepare('SELECT id,name,role FROM users WHERE id=? AND active=1').bind(id).first();
+  if (!(Number(expires) > Date.now() && Number(expires) < Date.now() + 604801000)) return null;
+  if (id === 'admin') return equal(mac || '', await signature(env.LIBRARY_PASSWORD, id + '.' + expires)) ? adminIdentity(env) : null;
+  const user = await env.DB.prepare('SELECT id,name,role,tokenHash FROM users WHERE id=? AND active=1').bind(id).first();
+  if (!user || !equal(mac || '', await signature(env.LIBRARY_PASSWORD, id + '.' + expires + '.' + user.tokenHash))) return null;
+  return {id:user.id,name:user.name,role:user.role};
 }
 async function tokenHash(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))), b => b.toString(16).padStart(2,'0')).join(''); }
 function record(row) { return { ...JSON.parse(row.metadata), id: row.id, owner:row.owner, name: row.name, originalName: JSON.parse(row.metadata).originalName || row.name, extension: row.extension, size: row.size, addedAt: row.addedAt }; }
@@ -51,10 +53,10 @@ export default {
         const { password } = await readJson(request, 2048);
         if (typeof password !== 'string' || password.length > 1024) return json({ error:'Ogiltig åtkomstnyckel.' }, 401);
         const admin = equal(await signature(env.LIBRARY_PASSWORD, password), await signature(env.LIBRARY_PASSWORD, env.LIBRARY_PASSWORD));
-        const user = admin ? { id:'admin' } : await env.DB.prepare('SELECT id FROM users WHERE tokenHash=? AND active=1').bind(await tokenHash(password)).first();
+        const user = admin ? { id:'admin' } : await env.DB.prepare('SELECT id,tokenHash FROM users WHERE tokenHash=? AND active=1').bind(await tokenHash(password)).first();
         if (!user) return json({ error:'Fel åtkomstnyckel.' }, 401);
         const expires = String(Date.now() + 604800000);
-        return new Response('{}', { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Set-Cookie': `session=${user.id}.${expires}.${await signature(env.LIBRARY_PASSWORD, user.id + '.' + expires)}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800` } });
+        return new Response('{}', { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Set-Cookie': `session=${user.id}.${expires}.${await signature(env.LIBRARY_PASSWORD, user.id + '.' + expires + (admin ? '' : '.' + user.tokenHash))}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800` } });
       }
       if (path === '/api/logout') return new Response('{}', { headers: { 'Set-Cookie': 'session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0' } });
       const user = await authenticated(request, env);
@@ -69,6 +71,13 @@ export default {
           const id = crypto.randomUUID(), token = crypto.randomUUID() + crypto.randomUUID();
           await env.DB.prepare('INSERT INTO users(id,name,role,tokenHash) VALUES(?,?,?,?)').bind(id,name,role,await tokenHash(token)).run();
           return json({ id,name,role,token }, 201);
+        }
+        const replaceId = path.match(/^\/api\/users\/([a-f0-9-]{36})\/replace$/)?.[1];
+        if (replaceId && request.method === 'POST') {
+          const token = crypto.randomUUID() + crypto.randomUUID();
+          const result = await env.DB.prepare('UPDATE users SET tokenHash=?,active=1 WHERE id=? RETURNING id,name,role,active').bind(await tokenHash(token),replaceId).first();
+          if (!result) return json({error:'Nyckeln finns inte.'},404);
+          return json({...result,token});
         }
         const id = path.match(/^\/api\/users\/(admin|[a-f0-9-]{36})$/)?.[1];
         if (id && request.method === 'PATCH') {
