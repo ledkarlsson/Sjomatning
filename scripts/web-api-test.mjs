@@ -98,6 +98,8 @@ try {
   const keysAfter=await (await call('users','GET',undefined,admin)).json();
   assert.ok(keysAfter.every(key=>!('token' in key)&&!('tokenHash' in key)));
   await (await import('./journal-api-checks.mjs')).checkJournal(mf,restored.token,replacement.token);
+  const gpx='<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1"><wpt lat="58.5" lon="15.7"/></gpx>';
+  const uploadedGpx=await call('files?name=Garmin.gpx','POST',gpx,replacementCookie,{'Content-Length':String(Buffer.byteLength(gpx))});assert.equal(uploadedGpx.status,201);
   console.log('PASS: inloggning, ägarskap, roller, filer, CSRF, spärrade nycklar samt idempotent synk isolerad per användare.');
 } finally { await mf.dispose(); }
 

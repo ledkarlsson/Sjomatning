@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import levels from '../src/roxen-level.js';
 import { validateEdits, validateNotes } from './validation.mjs';
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
-const allowed = /\.(pdf|wci|kap|bsb|csv|txt|trc|sl2|sl3)$/i;
+const allowed = /\.(pdf|wci|kap|bsb|csv|txt|trc|sl2|sl3|gpx)$/i;
 const encoder = new TextEncoder();
 async function signature(secret, value) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -112,7 +112,7 @@ export default {
       if (path === '/api/files' && request.method === 'POST') {
         if (!env.FILES) return json({ error:'Filbiblioteket väntar på att R2 aktiveras och ansluts i Cloudflare.' }, 503);
         const name = url.searchParams.get('name') || '';
-        if (user.role !== 'all' && !/\.(csv|txt|trc|sl2|sl3)$/i.test(name)) return json({ error:'Din behörighet tillåter endast uppladdning av spår.' }, 403);
+        if (user.role !== 'all' && !/\.(csv|txt|trc|sl2|sl3|gpx)$/i.test(name)) return json({ error:'Din behörighet tillåter endast uppladdning av spår.' }, 403);
         const size = Number(request.headers.get('Content-Length'));
         if (!allowed.test(name) || name.length > 240 || /[\\/\x00-\x1f]/.test(name)) return json({ error: 'Filformatet stöds inte.' }, 400);
         if (!Number.isInteger(size) || size < 1 || size > 95 * 1024 * 1024) return json({ error: 'Filen måste vara mellan 1 byte och 95 MB.' }, 413);

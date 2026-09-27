@@ -1,4 +1,5 @@
 export const validJournalId = value => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
+export const eventTimeText=e=>e.dateOnly?e.occurredAt.slice(0,10)+' (klockslag saknas)':e.occurredAt.replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC');
 export const measurementMethods={pole:'Stångmätning',echo_sounder_manual:'Ekolod manuellt',echo_sounder_nmea:'Ekolod från NMEA',visual_estimate:'Uppskattat djup/höjd'};
 export function validateSurvey(value){
   if(value==null)return null;
@@ -18,7 +19,7 @@ export function observationDepth(event){return event.depth==null?null:event.surv
 export function observationDetails(event){
  const lines=[];
  if(event.survey){const s=event.survey;lines.push(`Mätpass: ${s.name} | Båt/källa: ${s.vessel} | Område: ${s.area}`,`Vattenstånd: ${s.waterLevel} m | Referens: ${s.referenceLevel} m ${s.reference}`);}
- if(event.depth!=null){lines.push(`Rådjup: ${event.depth.toFixed(2)} m | Metod: ${measurementMethods[event.method]||'Ej angiven'}`);if(event.survey)lines.push(`Korrigerat djup: ${observationDepth(event).toFixed(2)} m (rådjup - (vattenstånd - referensnivå))`);else lines.push('Vattenstånd saknas: djupet är inte vattenståndskorrigerat.');}
+ if(event.depth!=null){lines.push(`Rådjup: ${event.depth.toFixed(2)} m | Metod: ${measurementMethods[event.method]||event.method||'Ej angiven'}`);if(event.survey)lines.push(`Korrigerat djup: ${observationDepth(event).toFixed(2)} m (rådjup - (vattenstånd - referensnivå))`);else lines.push('Vattenstånd saknas: djupet är inte vattenståndskorrigerat.');}
  return lines;
 }
 export function validateEvent(value) {
@@ -30,9 +31,13 @@ export function validateEvent(value) {
   const depth=value.depth??null;
   if(depth!==null&&(!Number.isFinite(depth)||depth< -12000||depth>12000))throw new Error('Ange ett djup mellan −12 000 och 12 000 meter eller lämna tomt.');
   const survey=validateSurvey(value.survey),method=value.method??null;
-  if(method!==null&&!Object.hasOwn(measurementMethods,method))throw new Error('Ogiltig mätmetod.');
+  if(method!==null&&(typeof method!=='string'||!method.trim()||method.length>80))throw new Error('Ogiltig mätmetod.');
   if(survey&&depth!==null&&!method)throw new Error('Välj mätmetod för mätpassets djupobservation.');
-  return {id:value.id,text:value.text.trim().replace(/\r\n?/g,'\n'),occurredAt:new Date(value.occurredAt).toISOString(),lat,lon,depth,...(survey?{survey}:{}),...(method?{method}:{})};
+  const extra={};if(value.dateOnly)extra.dateOnly=true;
+  if(value.kind){if(!['note','depth','mooring'].includes(value.kind))throw new Error('Ogiltig observationstyp.');extra.kind=value.kind;}
+  if(value.kind==='mooring'){if(lat===null||!Array.isArray(value.positions)||value.positions.length<2||value.positions.length>1000||value.positions.some(p=>!Number.isFinite(p.lat)||!Number.isFinite(p.lon)||Math.abs(p.lat)>90||Math.abs(p.lon)>180))throw new Error('Ogiltiga tilläggningspositioner.');extra.positions=value.positions.map(p=>({lat:p.lat,lon:p.lon}));extra.positions[0]={lat,lon};}
+  if(value.obs){if(typeof value.obs!=='object'||!value.obs.header||!value.obs.observation||JSON.stringify(value.obs).length>30000)throw new Error('Ogiltigt OBS-underlag.');extra.obs=JSON.parse(JSON.stringify(value.obs));}
+  return {id:value.id,text:value.text.trim().replace(/\r\n?/g,'\n'),occurredAt:new Date(value.occurredAt).toISOString(),lat,lon,depth,...(survey?{survey}:{}),...(method?{method}:{}),...extra};
 }
 export function orderedEvents(rows) { return rows.filter(row=>!row.deleted).sort((a,b)=>a.event.occurredAt.localeCompare(b.event.occurredAt)||a.event.id.localeCompare(b.event.id)); }
 export function exportJournal(rows,format) {
@@ -41,7 +46,7 @@ export function exportJournal(rows,format) {
   if (format!=='csv') throw new Error('Okänt exportformat.');
   // Prevent spreadsheet formula execution while retaining complete text in JSON.
   const cell=value=>'"'+(typeof value==='string'?value.replace(/^[=+\-@\t\r]/,match=>"'"+match):String(value??'')).replaceAll('"','""')+'"';
-  return '\uFEFF'+['Id;Datum och tid (UTC);Latitud;Longitud;Djup (m);Händelse;Mätmetod;Mätpass-id;Mätpass;Båt;Område;Vattenstånd;Referensnivå;Höjdsystem;Korrigerat djup',...events.map(e=>[e.id,e.occurredAt,e.lat,e.lon,e.depth,e.text,measurementMethods[e.method],e.survey?.id,e.survey?.name,e.survey?.vessel,e.survey?.area,e.survey?.waterLevel,e.survey?.referenceLevel,e.survey?.reference,e.survey?observationDepth(e):null].map(cell).join(';'))].join('\r\n')+'\r\n';
+  return '\uFEFF'+['Id;Datum och tid (UTC);Latitud;Longitud;Djup (m);Händelse;Mätmetod;Mätpass-id;Mätpass;Båt;Område;Vattenstånd;Referensnivå;Höjdsystem;Korrigerat djup',...events.map(e=>[e.id,e.dateOnly?e.occurredAt.slice(0,10):e.occurredAt,e.lat,e.lon,e.depth,e.text,measurementMethods[e.method],e.survey?.id,e.survey?.name,e.survey?.vessel,e.survey?.area,e.survey?.waterLevel,e.survey?.referenceLevel,e.survey?.reference,e.survey?observationDepth(e):null].map(cell).join(';'))].join('\r\n')+'\r\n';
 }
 export function localDateTime(iso) {
   const d=new Date(iso), pad=n=>String(n).padStart(2,'0');

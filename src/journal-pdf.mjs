@@ -1,4 +1,4 @@
-import {orderedEvents,observationDetails} from './journal-model.mjs';
+import {orderedEvents,observationDetails,eventTimeText} from './journal-model.mjs';
 import {pdfFonts} from './pdf-fonts.mjs';
 export async function journalPdf(rows,{PDFDocument,StandardFonts,rgb}) {
   const doc=await PDFDocument.create();doc.setTitle('Observationsdagbok');
@@ -23,9 +23,10 @@ export async function journalPdf(rows,{PDFDocument,StandardFonts,rgb}) {
   if(!events.length)line('Inga händelser.');
   for(const [index,row] of events.entries()){
     if(y<bottom+95)newPage();
-    wrapped(`${index+1}. ${row.event.occurredAt.replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC')}`,bold,12);
+    wrapped(`${index+1}. ${eventTimeText(row.event)}`,bold,12);
     if(row.event.lat!==null)line(`Position: ${row.event.lat.toFixed(6)}, ${row.event.lon.toFixed(6)}`,regular,10);
     for(const detail of observationDetails(row.event))wrapped(detail,regular,10);
+    if(row.event.positions)for(const [i,p] of row.event.positions.entries())wrapped(`Position ${i+1}: ${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`,regular,10);
     wrapped(row.event.text);y-=13;
   }
   const pages=doc.getPages();pages.forEach((p,i)=>p.drawText(`Sida ${i+1} av ${pages.length}`,{x:left,y:30,size:9,font:regular,color:rgb(.4,.4,.4)}));

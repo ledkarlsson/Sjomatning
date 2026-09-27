@@ -39,7 +39,8 @@ export function prunePoints(points, minimumDistance = 25) {
 }
 
 export function processedPoints(track) {
-  return prunePoints(track.points, track.pruneDistance || 0)
+  const groups=[];for(const point of track.points){let group=groups.at(-1);if(!group||group[0].segment!==point.segment){group=[];groups.push(group);}group.push(point);}
+  return groups.flatMap(points=>prunePoints(points, track.pruneDistance || 0))
 }
 
 export function adjustedDepth(track, point) {

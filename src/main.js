@@ -90,7 +90,7 @@ async function collectSurveyFiles(rootPath) {
     for (const entry of entries) {
       const filePath = path.join(directory, entry.name)
       if (entry.isDirectory()) await visit(filePath)
-      else if (entry.isFile() && /\.(pdf|kap|wci|bsb|txt|csv|trc|sl2|sl3)$/i.test(entry.name)) {
+      else if (entry.isFile() && /\.(pdf|kap|wci|bsb|txt|csv|trc|sl2|sl3|gpx)$/i.test(entry.name)) {
         files.push(await readSurveyFile(filePath, rootPath))
       }
     }
@@ -108,7 +108,7 @@ ipcMain.handle('files:open-pdf', () => selectFiles({
 ipcMain.handle('files:open-logs', () => selectFiles({
   title: 'Välj mätloggar',
   properties: ['openFile', 'multiSelections'],
-  filters: [{ name: 'Mätspår', extensions: ['txt', 'csv', 'trc', 'sl2', 'sl3'] }]
+  filters: [{ name: 'Mätspår', extensions: ['txt', 'csv', 'trc', 'sl2', 'sl3', 'gpx'] }]
 }))
 
 ipcMain.handle('files:open-folder', async () => {
@@ -129,7 +129,7 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
       const folderFiles = await collectSurveyFiles(inputPath)
       folders.push({ name: path.basename(inputPath), path: inputPath, files: folderFiles })
       files.push(...folderFiles)
-    } else if (info.isFile() && /\.(pdf|kap|wci|bsb|txt|csv|trc|sl2|sl3)$/i.test(inputPath)) {
+    } else if (info.isFile() && /\.(pdf|kap|wci|bsb|txt|csv|trc|sl2|sl3|gpx)$/i.test(inputPath)) {
       files.push(await readSurveyFile(inputPath))
     }
   }
@@ -139,7 +139,7 @@ ipcMain.handle('files:scan-paths', async (_event, inputPaths) => {
 })
 
 ipcMain.handle('library:update', (_event, id, changes) => libraryStore.update(id, changes))
-ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'kap', 'wci', 'bsb', 'txt', 'csv', 'trc', 'sl2', 'sl3'] }] }))
+ipcMain.handle('files:open-library', () => selectFiles({ title: 'Lägg till filer', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Fältmanus och mätspår', extensions: ['pdf', 'kap', 'wci', 'bsb', 'txt', 'csv', 'trc', 'sl2', 'sl3', 'gpx'] }] }))
 ipcMain.handle('library:list', () => libraryStore.list())
 ipcMain.handle('library:cloud-users', async (_event, {token} = {}) => {
   const credentials=createCloudCredentials(path.join(app.getPath('userData'),'cloud-key.bin'),safeStorage)
@@ -173,6 +173,14 @@ ipcMain.handle('chart:export-pdf',async(_event,data)=>{
   const relative=path.relative(app.getPath('userData'),path.resolve(result.filePath))
   if(!relative||(!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative)))throw new Error('Exportera utanför appens datamapp.')
   await fs.writeFile(result.filePath,bytes);return result.filePath
+})
+ipcMain.handle('journal:export-obs',async(_event,{name,content})=>{
+  if(typeof content!=='string'||content.length>10000000||JSON.parse(content).format!=='KodObservationFile')throw new Error('Ogiltig OBS-export.')
+  const result=await dialog.showSaveDialog({title:'Exportera OBS',defaultPath:path.basename(name),filters:[{name:'Jonas OBS',extensions:['obs']}]})
+  if(result.canceled||!result.filePath)return null
+  const relative=path.relative(app.getPath('userData'),path.resolve(result.filePath))
+  if(!relative||(!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative)))throw new Error('Exportera utanför appens datamapp.')
+  await fs.writeFile(result.filePath,content,'utf8');return result.filePath
 })
 ipcMain.handle('journal:export', async (_event, format) => {
   if(!['json','csv','pdf'].includes(format))throw new Error('Okänt exportformat.')

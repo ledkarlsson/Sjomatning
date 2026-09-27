@@ -27,7 +27,7 @@ async function syncLibrary({ files, token, calibrations = {}, previous = {}, che
   for (let index=0; index<files.length; index++) {
     const file = files[index]
     progress({ current:index+1, total:files.length, name:file.name })
-    if (user.role !== 'all' && !/\.(csv|txt|trc|sl2|sl3)$/i.test(file.name)) { result.skipped++; continue }
+    if (user.role !== 'all' && !/\.(csv|txt|trc|sl2|sl3|gpx)$/i.test(file.name)) { result.skipped++; continue }
     try {
       const bytes = Buffer.from(file.bytes)
       if (!bytes.length || bytes.length>95*1024*1024) throw new Error('Filen måste vara mellan 1 byte och 95 MB.')

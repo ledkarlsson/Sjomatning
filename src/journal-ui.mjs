@@ -1,5 +1,6 @@
 import {surveyForm} from './survey-form.mjs';
-import {localDateTime,observationDetails} from './journal-model.mjs';
+import {mountObsTools} from './obs-ui.mjs';
+import {localDateTime,observationDetails,eventTimeText} from './journal-model.mjs';
 export function mountJournal(api,getPosition,map={}) {
   if(!api.journalList)return;
   const host=document.createElement('section');host.className='panel journal-panel';
@@ -18,6 +19,8 @@ export function mountJournal(api,getPosition,map={}) {
   document.body.append(dialog);
   const $=selector=>dialog.querySelector(selector),form=$('[data-editor]'),status=$('[data-status]');
   const survey=surveyForm(form);
+  const timeChoice=document.createElement('label');timeChoice.innerHTML='<input name="timeKnown" type="checkbox" checked>Klockslag är känt';form.querySelector('[name=occurredAt]').closest('label').after(timeChoice);
+  const mooring=document.createElement('label');mooring.hidden=true;mooring.innerHTML='Tilläggningsplatsens positioner (latitud;longitud, en per rad)<textarea name="positions" rows="4"></textarea>';form.querySelector('[name=lon]').closest('.coordinate-grid').after(mooring);
   let rows=[],selected=null,dirty=false,busy=false,draftId=crypto.randomUUID(),loadVersion=0;
   const field=name=>form.elements.namedItem(name);
   function setBusy(value){busy=value;dialog.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=value);}
@@ -26,6 +29,9 @@ export function mountJournal(api,getPosition,map={}) {
     selected=row;draftId=row?.event.id??crypto.randomUUID();form.reset();field('occurredAt').value=localDateTime(row?.event.occurredAt??new Date().toISOString());
     field('depth').value=row?.event.depth??'';field('text').value=row?.event.text??'';field('lat').value=row?.event.lat??'';field('lon').value=row?.event.lon??'';
     survey.select(row?.event);
+    field('timeKnown').checked=!row?.event.dateOnly;field('occurredAt').type=row?.event.dateOnly?'date':'datetime-local';field('occurredAt').value=row?.event.dateOnly?row.event.occurredAt.slice(0,10):localDateTime(row?.event.occurredAt??new Date().toISOString());
+    $('[data-map-position]').hidden=!map.pick||row?.event.kind==='mooring';$('[data-position]').hidden=row?.event.kind==='mooring';
+    field('lat').readOnly=field('lon').readOnly=row?.event.kind==='mooring';mooring.hidden=row?.event.kind!=='mooring';field('positions').value=(row?.event.positions||[]).map(p=>p.lat+';'+p.lon).join('\n');
     $('[data-title]').textContent=row?'Redigera händelse':'Ny händelse';$('[data-delete]').hidden=!row;dirty=false;
   }
   function render(){
@@ -33,13 +39,13 @@ export function mountJournal(api,getPosition,map={}) {
     for(const row of [...rows].sort((a,b)=>b.event.occurredAt.localeCompare(a.event.occurredAt))){
       if(row.deleted&&!row.conflict)continue;
       const item=document.createElement('article');item.className='journal-entry';
-      const heading=document.createElement('button');heading.type='button';heading.textContent=new Date(row.event.occurredAt).toLocaleString('sv-SE')+(row.dirty?' · Ej synkad':'');
+      const heading=document.createElement('button');heading.type='button';heading.textContent=(row.event.dateOnly?eventTimeText(row.event):new Date(row.event.occurredAt).toLocaleString('sv-SE'))+(row.dirty?' · Ej synkad':'');
       heading.onclick=()=>{if(discard())select(row);};
       const text=document.createElement('p');text.textContent=row.event.text;item.append(heading,text);
       for(const detail of observationDetails(row.event)){const p=document.createElement('p');p.textContent=detail;item.append(p);}
       if(row.event.lat!==null){const position=document.createElement('small');position.textContent=`${row.event.lat}, ${row.event.lon}`;item.append(position);}
       if(row.conflict){
-        const warning=document.createElement('p');warning.textContent='Synkkonflikt. Webbversion: '+(row.conflict.deleted?'Borttagen':new Date(row.conflict.event.occurredAt).toLocaleString('sv-SE')+' · '+row.conflict.event.text+' · Djup: '+(row.conflict.event.depth==null?'saknas':row.conflict.event.depth+' m')+' · Position: '+(row.conflict.event.lat==null?'saknas':row.conflict.event.lat+', '+row.conflict.event.lon)+' · '+observationDetails(row.conflict.event).join(' · '));item.append(warning);
+        const warning=document.createElement('p');warning.textContent='Synkkonflikt. Webbversion: '+(row.conflict.deleted?'Borttagen':eventTimeText(row.conflict.event)+' · '+row.conflict.event.text+' · Djup: '+(row.conflict.event.depth==null?'saknas':row.conflict.event.depth+' m')+' · Position: '+(row.conflict.event.lat==null?'saknas':row.conflict.event.lat+', '+row.conflict.event.lon)+' · '+observationDetails(row.conflict.event).join(' · '));item.append(warning);
         for(const [choice,label] of [['local','Behåll min ändring'],['remote','Använd webbversion']]){const button=document.createElement('button');button.textContent=label;button.onclick=()=>run(async()=>{if(!discard())return;await api.journalResolve(row.event.id,choice);await reload();select(null);status.textContent=choice==='local'?'Din version är vald. Synka för att skicka den.':'Webbversionen har hämtats.';});item.append(button);}
       }
       list.append(item);
@@ -49,6 +55,7 @@ export function mountJournal(api,getPosition,map={}) {
   async function reload(){const version=++loadVersion;const data=await api.journalList();if(version!==loadVersion)return;rows=data.rows;survey.rows(rows);render();map.onRows?.(rows);}
   async function run(fn){if(busy)return;setBusy(true);try{await fn();}catch(error){status.textContent=error.message;}finally{setBusy(false);}}
   form.oninput=()=>{dirty=true;};
+  field('timeKnown').onchange=()=>{const date=field('occurredAt').value.slice(0,10);field('occurredAt').type=field('timeKnown').checked?'datetime-local':'date';field('occurredAt').value=field('timeKnown').checked?date+'T00:00:00':date;dirty=true;};
   function open(row=null){if(busy||(!dialog.open&&!discard()))return false;if(!dialog.open)dialog.showModal();select(row);status.textContent='';$('[data-location]').textContent=api.journalSync?'Sparas på datorn. Synka för att skicka och hämta händelser med din personliga webbnyckel.':'Sparas direkt i din personliga dagbok på webben. Internet krävs.';void run(reload);return true;}
   host.querySelector('[data-open]').onclick=()=>open();
   $('[data-close]').onclick=()=>{if(!busy&&discard())dialog.close();};
@@ -58,6 +65,9 @@ export function mountJournal(api,getPosition,map={}) {
   form.onsubmit=event=>{event.preventDefault();void run(async()=>{
     const data={id:draftId,occurredAt:new Date(field('occurredAt').value).toISOString(),text:field('text').value,depth:field('depth').value===''?null:Number(field('depth').value),lat:field('lat').value===''?null:Number(field('lat').value),lon:field('lon').value===''?null:Number(field('lon').value)};
     Object.assign(data,survey.read());
+    data.dateOnly=!field('timeKnown').checked;if(data.dateOnly)data.occurredAt=field('occurredAt').value+'T00:00:00.000Z';
+    if(selected?.event.obs)data.obs=selected.event.obs;
+    if(selected?.event.kind==='mooring'){data.kind='mooring';data.positions=field('positions').value.trim().split('\n').map(line=>{const [lat,lon]=line.split(';').map(Number);return {lat,lon};});data.lat=data.positions[0]?.lat;data.lon=data.positions[0]?.lon;}else data.kind=data.depth==null?'note':'depth';
     const saved=await api.journalSave({event:data,expectedMutation:selected?.mutation??null,baseRevision:selected?.revision??0,deleted:false});
     survey.saved(saved.event);await reload();select(rows.find(row=>row.event.id===saved.event.id));status.textContent=api.journalSync?'Händelsen är sparad på datorn.':'Händelsen är sparad på webben.';
   });};
@@ -87,6 +97,7 @@ export function mountJournal(api,getPosition,map={}) {
   dialog.querySelectorAll('[data-export]').forEach(button=>button.onclick=()=>run(async()=>{if(dirty)throw new Error('Spara dina ändringar innan du exporterar.');const result=await api.journalExport(button.dataset.export);status.textContent=result?'Dagboken är exporterad.':'Exporten avbröts.';}));
   window.addEventListener('beforeunload',event=>{if(dirty||busy){event.preventDefault();event.returnValue='';}});
   void reload().catch(error=>{const message=document.createElement('p');message.textContent='Kunde inte läsa dagbokens kartmarkeringar: '+error.message;host.append(message);});
+  mountObsTools(host,api,reload);
   return {open:id=>open(rows.find(row=>row.event.id===id)),createAt:point=>{if(!open())return;field('lat').value=point.lat.toFixed(6);field('lon').value=point.lon.toFixed(6);dirty=true;}};
 }
 function askKey(message){

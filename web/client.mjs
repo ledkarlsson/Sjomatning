@@ -46,14 +46,15 @@ async function upload(files) {
   } catch (error) { status.textContent = error.message; if (result.length && app) await app.addLibraryFiles(result); throw error; }
 }
 async function choose(folder = false) {
-  const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.pdf,.kap,.wci,.bsb,.csv,.txt,.trc,.sl2,.sl3';
+  const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.pdf,.kap,.wci,.bsb,.csv,.txt,.trc,.sl2,.sl3,.gpx';
   if (folder) input.setAttribute('webkitdirectory', '');
   const files = await new Promise(resolve => { input.onchange = () => resolve([...input.files]); input.oncancel = () => resolve([]); input.click(); });
-  return upload(files.filter(file => /\.(pdf|kap|wci|bsb|csv|txt|trc|sl2|sl3)$/i.test(file.name)));
+  return upload(files.filter(file => /\.(pdf|kap|wci|bsb|csv|txt|trc|sl2|sl3|gpx)$/i.test(file.name)));
 }
 let records = [], app;
 const journalPendingWrites = new Map();
 window.sjomatning = {
+  exportObsFile: async ({name,content}) => download(content,name,'application/json'),
   exportChartPdf: async data => {const {chartPdf}=await import('./src/chart-pdf.mjs');return download(await chartPdf(data,await import('./pdf-lib.mjs')),'matkarta.pdf','application/pdf');},
   createTrackPoint: async value => {
     const {manualTrackFile}=await import('./src/manual-track.mjs');

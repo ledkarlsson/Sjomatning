@@ -14,6 +14,8 @@ export async function chartPdf(data,lib){
  if(data.layers.background)await layer('Kartbakgrund','Base',async()=>{const img=await doc.embedPng(data.png);page.drawImage(img,{x,y,width:w,height:h});});
  const points=data.points.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.y>=0&&p.x<=data.width&&p.y<=data.height);
  if(data.layers.points)await layer('Mätpunkter','Points',()=>{for(const p of points)page.drawCircle({...pos(p),size:1.8,color:rgb(.05,.3,.5)});});
+ const boxes=data.boxes||[];
+ if(data.layers.boxes)await layer('Djup i fyrkanter','DepthBoxes',()=>{for(const box of boxes){if(box.depth==null)continue;const corners=box.corners.map(pos),cx=corners.reduce((s,p)=>s+p.x,0)/4,cy=corners.reduce((s,p)=>s+p.y,0)/4,label=box.depth.toFixed(1),width=Math.hypot(corners[1].x-corners[0].x,corners[1].y-corners[0].y),height=Math.hypot(corners[2].x-corners[1].x,corners[2].y-corners[1].y),size=Math.min(9,height*.65,(width-1)/font.widthOfTextAtSize(label,1));if(size<=0)continue;const tw=font.widthOfTextAtSize(label,size);page.drawRectangle({x:cx-tw/2-1,y:cy-size/2-1,width:tw+2,height:size+2,color:rgb(1,1,1)});page.drawText(label,{x:cx-tw/2,y:cy-size/3,size,font,color:rgb(.65,0,0)});}});
  let omitted=0;const occupied=[];
  if(data.layers.depths)await layer('Djupsiffror','Depths',()=>{for(const p of points){if(!Number.isFinite(p.depth))continue;const label=p.depth.toFixed(1),a=pos(p),lw=font.widthOfTextAtSize(label,8),r={x:a.x+3,y:a.y-3,w:lw+2,h:10};if(r.x+r.w>x+w||r.y<y||r.y+r.h>y+h||occupied.some(b=>r.x<b.x+b.w&&r.x+r.w>b.x&&r.y<b.y+b.h&&r.y+r.h>b.y)){omitted++;continue;}occupied.push(r);page.drawRectangle({x:r.x-1,y:r.y-1,width:r.w,height:r.h,color:rgb(1,1,1)});page.drawText(label,{x:r.x,y:r.y,size:8,font,color:rgb(.05,.2,.35)});}});
  const rows=orderedEvents(data.rows),positions=new Map(data.observations.map(p=>[p.id,p]));
@@ -21,6 +23,7 @@ export async function chartPdf(data,lib){
   const labels=[];
   for(const [i,row] of rows.entries()){
    const p=positions.get(row.event.id);if(!p)continue;const origin=pos(p);let a=null;
+   if(p.path)for(let k=1;k<p.path.length;k++){if(!p.path[k-1]||!p.path[k]||[p.path[k-1],p.path[k]].some(q=>q.x<0||q.y<0||q.x>data.width||q.y>data.height))continue;page.drawLine({start:pos(p.path[k-1]),end:pos(p.path[k]),thickness:1,color:rgb(.48,.19,.58)});}
    for(let ring=0;ring<40&&!a;ring++)for(let step=0;step<(ring?16:1);step++){
     const candidate={x:origin.x+ring*17*Math.cos(step*Math.PI/8),y:origin.y+ring*17*Math.sin(step*Math.PI/8)};
     if(candidate.x<x+8||candidate.x>x+w-8||candidate.y<y+8||candidate.y>y+h-8||labels.some(b=>Math.hypot(b.x-candidate.x,b.y-candidate.y)<17))continue;
@@ -41,6 +44,7 @@ export async function chartPdf(data,lib){
  function line(text){for(const paragraph of String(text).replaceAll('−','-').split('\n')){let part='';for(const word of paragraph.split(' ')){if(font.widthOfTextAtSize(part+' '+word,10)>495){if(part)write(part);part='';for(const char of word){if(font.widthOfTextAtSize(part+char,10)>495){write(part);part='';}part+=char;}}else part+=(part?' ':'')+word;}write(part);}}
  function write(text){if(cy<50){info=doc.addPage([595.28,841.89]);cy=790;}info.drawText(text,{x:48,y:cy,size:10,font});cy-=16;}
  line('MÄTUNDERLAG');line('Exporterad '+new Date().toISOString());line('Kartan återger aktuell kartvy. Kartbakgrunden är raster; tillagda punkter och siffror är vektorer.');
+ if(data.layers.boxes)line(`Djupfyrkanter: ${boxes.filter(b=>b.depth!=null).length} ifyllda, ${boxes.filter(b=>b.depth==null).length} återstår, ${boxes.length} totalt inom kartbilden. Stång: grundaste värdet. Annars tre värden med högst 0,1 m spridning eller trimmat medelvärde vid minst fyra värden.`);
  line('Djupsiffror för spår använder spårets vattenståndskorrigering och extra djupjustering. Ingen ytterligare vattenståndskorrigering görs vid export.');
  for(const text of data.tracks)line(text);
  line('Observationernas rådjup, mätmetod och eventuella vattenståndskorrigering redovisas i förteckningen. Endast sparade observationer inom kartbilden ingår.');

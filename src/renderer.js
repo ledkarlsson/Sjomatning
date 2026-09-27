@@ -1,3 +1,5 @@
+import {readJonasMetadata,jonasCalibration,jonasDepthBoxes,fillDepthBoxes,jonasTrackPoints} from './jonas-chart.mjs'
+import {parseGpx} from './gpx-parser.mjs'
 import {observationDepth} from './journal-model.mjs'
 import { mountMapContext, trackPointDialog } from './map-context.mjs'
 import { manualTrackFile } from './manual-track.mjs'
@@ -112,6 +114,7 @@ function toast(message) {
 }
 
 function parseTrackFile(bytes, name) {
+  if(/\.gpx$/i.test(name))return parseGpx(bytesToText(bytes),name)
   if (/\.sl[23]$/i.test(name)) return parseLowranceTrack(bytes, name)
   return /\.trc$/i.test(name) ? parseTrcTrack(bytes, name) : parseTextTrack(bytesToText(bytes), name)
 }
@@ -236,7 +239,7 @@ async function loadPdfFile(file, pageNumber = 1, editing = false) {
   try {
     const bytes = file instanceof File ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(file.bytes)
     const canvas = document.createElement('canvas')
-    let pdf = null, page, automatic = null, fontScale
+    let pdf = null, page, automatic = null, fontScale, jonas = null, boxes = []
     if (file.chart) {
       const pixels = await rasterPixels(file.chart)
       canvas.width = pixels.width; canvas.height = pixels.height
@@ -250,7 +253,10 @@ async function loadPdfFile(file, pageNumber = 1, editing = false) {
       canvas.width = Math.round(view.width); canvas.height = Math.round(view.height)
       await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise
       fontScale = canvas.width / (page.getViewport({scale:1}).width / page.userUnit)
-      if (pageNumber === 1) automatic = parseGeoPdf(bytes)
+      const metadata=file.jonasMetadata??await readJonasMetadata(pdf)
+      jonas=jonasCalibration(metadata,page)
+      if(jonas){automatic=jonas.points;boxes=await jonasDepthBoxes(page,jonas.entry,pdfjsLib.OPS)}
+      else if (pageNumber === 1) automatic = parseGeoPdf(bytes)
     }
     if (loadId !== documentLoadId) { if (pdf) await pdf.loadingTask.destroy(); return false }
     const previousPdf = state.pdf
@@ -264,9 +270,16 @@ async function loadPdfFile(file, pageNumber = 1, editing = false) {
     pdfCanvas.width = overlay.width = state.width; pdfCanvas.height = overlay.height = state.height
     pdfCanvas.getContext('2d').drawImage(canvas,0,0)
     state.calibration = automatic ? automatic.map(point=>({x:point.nx*state.width,y:(1-point.ny)*state.height,lat:point.lat,lon:point.lon,automatic:true})) : restoreCalibration()
-    state.transform = file.chart ? {type:'chart',geo:file.chart.geometry} : calibrationTransform(state.calibration)
+    state.jonas=jonas;state.depthBoxes=boxes
+    state.transform = jonas?{type:'chart',geo:jonas.geometry}:file.chart ? {type:'chart',geo:file.chart.geometry} : calibrationTransform(state.calibration)
     $('documentName').textContent = file.name
-    $('pageInfo').textContent = pdf ? 'PDF' : file.chart.type.toUpperCase()
+    $('pageInfo').textContent = pdf ? `PDF · sida ${pageNumber} av ${pdf.numPages}` : file.chart.type.toUpperCase()
+    let pageSelect = $('manuscriptPage')
+    if (!pageSelect) { pageSelect=document.createElement('select');pageSelect.id='manuscriptPage';pageSelect.setAttribute('aria-label','Välj kartsida');$('pageInfo').after(pageSelect) }
+    pageSelect.hidden = !pdf || pdf.numPages < 2 || editing
+    pageSelect.replaceChildren()
+    if (!pageSelect.hidden) { for(let number=1;number<=pdf.numPages;number++){const option=document.createElement('option');option.value=number;option.textContent=`Sida ${number}`;option.selected=number===pageNumber;pageSelect.append(option)} }
+    pageSelect.onchange=()=>loadPdfFile(file,Number(pageSelect.value))
     $('introPanel').classList.add('hidden'); $('documentPanel').classList.remove('hidden')
     $('calibrationPanel').classList.toggle('hidden',Boolean(state.transform) || editing)
     $('emptyState').classList.add('hidden'); wrap.classList.remove('hidden'); viewportElement.classList.remove('empty')
@@ -293,6 +306,7 @@ async function manuscriptRaster(file) {
     loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(file.bytes).slice() })
     const pdf = await loadingTask.promise
     const page = await pdf.getPage(1)
+    if(file.jonas)file.depthBoxes=await jonasDepthBoxes(page,file.jonas.entry,pdfjsLib.OPS)
     const original = page.getViewport({ scale: 1 })
     const viewport = page.getViewport({ scale: Math.min(2, 2400 / Math.max(original.width, original.height)) })
     const canvas = document.createElement('canvas')
@@ -301,7 +315,7 @@ async function manuscriptRaster(file) {
     // LPTS coordinates belong to the geographic viewport, which can be smaller than the page.
     const raw = new TextDecoder('latin1').decode(new Uint8Array(file.bytes))
     const match = raw.match(/\/VP\s*\[\s*<<\s*\/BBox\s*\[([^\]]+)\]/)
-    const box = match ? match[1].trim().split(/\s+/).map(Number) : page.view
+    const box = match && !file.jonas ? match[1].trim().split(/\s+/).map(Number) : page.view
     const a = viewport.convertToViewportPoint(box[0], box[1])
     const b = viewport.convertToViewportPoint(box[2], box[3])
     const crop = { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0]-a[0]), height: Math.abs(b[1]-a[1]) }
@@ -319,6 +333,7 @@ async function manuscriptRaster(file) {
 }
 
 function manuscriptGeometry(file) {
+  if (file.jonas) return file.jonas.geometry
   if (file.chart) return file.chart.geometry
   const points = parseGeoPdf(new Uint8Array(file.bytes))
   if (!points) return null
@@ -505,7 +520,7 @@ async function addLibraryFiles(files, folders = [], quiet = false) {
       try { const chart = readRasterChart(bytes, file.name); state.library.pdfs.push({ ...file, chart, hasGeoData: true, size: bytes.byteLength }) }
       catch (error) { state.library.pdfs.push({ ...file, hasGeoData: false, size: bytes.byteLength, error: error.message }); toast(`${file.name}: ${error.message}`) }
     } else if (/\.pdf$/i.test(file.name)) {
-      state.library.pdfs.push({ ...file, hasGeoData: Boolean(parseGeoPdf(bytes)), size: bytes.byteLength })
+      let task;try{task=pdfjsLib.getDocument({data:bytes.slice(),verbosity:0});const doc=await task.promise,metadata=await readJonasMetadata(doc),jonas=jonasCalibration(metadata,await doc.getPage(1));state.library.pdfs.push({...file,jonasMetadata:metadata,jonas,mapGeometry:jonas?.geometry,hasGeoData:!!jonas||Boolean(parseGeoPdf(bytes)),size:bytes.byteLength});}catch(error){state.library.pdfs.push({...file,hasGeoData:false,error:error.message,size:bytes.byteLength});toast(file.name+': '+error.message);}finally{if(task)await task.destroy();}
     } else {
       try {
         const parsed = parseTrackFile(bytes, file.originalName || file.name)
@@ -564,8 +579,8 @@ function renderFolder() {
   $('folderCount').textContent = `${folder.pdfs.length + folder.tracks.length} filer`
   const pdfCard = (file, index) => `
     <div class="folder-file-card">
-      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(fileLabel(file))}</strong><span>${escapeHtml(file.chart?.type?.toUpperCase() || 'PDF')} · Område: ${escapeHtml(manuscriptName(fileLabel(file)))} · ${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.error ? escapeHtml(file.error) : file.hasGeoData ? (file.chart ? file.chart.type.toUpperCase() + ' · Geodata' : 'GeoPDF') : 'Utan geodata'}</i></span></div>
-      <div class="file-actions"><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-annotate-pdf="${index}" ${file.error ? 'disabled' : ''}>Anteckna</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort ${escapeHtml(fileLabel(file))}" aria-label="Ta bort ${escapeHtml(fileLabel(file))}">×</button></div>
+      <div class="folder-file-main"><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(fileLabel(file))}</strong><span>${escapeHtml(file.chart?.type?.toUpperCase() || 'PDF')} · Område: ${escapeHtml(manuscriptName(fileLabel(file)))} · ${formatBytes(file.size)} · <i class="file-state ${file.hasGeoData ? 'geo' : ''}">${file.error ? escapeHtml(file.error) : file.hasGeoData ? (file.chart ? file.chart.type.toUpperCase() + ' · Geodata' : file.jonas?'Jonas kalibrering':'GeoPDF') : 'Utan geodata'}</i></span></div>
+      <div class="file-actions"><button class="small-button" data-open-pdf="${index}" ${file.error ? 'disabled' : ''}>Öppna sida</button><button class="small-button" data-locate-pdf="${index}" ${file.error ? 'disabled' : ''}>Gå till plats</button><button class="small-button" data-annotate-pdf="${index}" ${file.error ? 'disabled' : ''}>Anteckna</button><button class="small-button" data-rename-pdf="${index}">Byt namn</button><button class="small-button danger" data-delete-pdf="${index}" title="Ta bort ${escapeHtml(fileLabel(file))}" aria-label="Ta bort ${escapeHtml(fileLabel(file))}">×</button></div>
     </div>`
   const pdfGroups = [
     ['Med geodata', folder.pdfs.map((file, index) => ({ file, index })).filter(item => item.file.hasGeoData)],
@@ -584,6 +599,7 @@ function renderFolder() {
   $('folderTrackList').innerHTML = indexedTracks.length ? trackGroups.filter(([, items]) => items.length).map(([title, items]) => `<div class="folder-group"><p class="folder-group-title">${title}</p>${items.map(({ file, index }) => trackCard(file, index)).join('')}</div>`).join('') : '<p class="empty-list">Inga mätspår hittades.</p>'
 
   document.querySelectorAll('[data-annotate-pdf]').forEach(button=>button.onclick=()=>openAnnotationEditor(folder.pdfs[Number(button.dataset.annotatePdf)]))
+  document.querySelectorAll('[data-open-pdf]').forEach(button => button.addEventListener('click', () => loadPdfFile(folder.pdfs[Number(button.dataset.openPdf)])))
   document.querySelectorAll('[data-locate-pdf]').forEach(button => button.addEventListener('click', () => {
     const file = folder.pdfs[Number(button.dataset.locatePdf)]
     if (!file.hasGeoData) return loadPdfFile(file)
@@ -742,9 +758,9 @@ function drawOverlay() {
     for (const sample of samples) {
       const pixel = geoToPixel(sample.point.lat, sample.point.lon)
       if (!pixel) continue
-      if (previous && (sample.index === previous.index + 1 || Math.hypot(pixel.x-previous.x,pixel.y-previous.y)*state.scale <= 12)) context.lineTo(pixel.x,pixel.y)
+      if (previous && previous.segment===sample.point.segment && (sample.index === previous.index + 1 || Math.hypot(pixel.x-previous.x,pixel.y-previous.y)*state.scale <= 12)) context.lineTo(pixel.x,pixel.y)
       else context.moveTo(pixel.x,pixel.y)
-      previous = {...pixel,index:sample.index}
+      previous = {...pixel,index:sample.index,segment:sample.point.segment}
     }
     context.setLineDash(trackColors && state.logs.indexOf(log) % 2 ? [7/state.scale,4/state.scale] : []);context.strokeStyle=log.color;context.globalAlpha=focusedTrack && focusedTrack !== log ? .2 : .85;context.lineWidth=(focusedTrack === log ? 5 : 2.2)/state.scale;context.stroke();context.setLineDash([]);context.globalAlpha=1
     for(const {point} of samples) {
@@ -1751,6 +1767,7 @@ function drawJournalMarkers(context){
   for(const row of journalRows){
     const event=row.event
     if(row.deleted||!Number.isFinite(event.lat)||!Number.isFinite(event.lon))continue
+    if(event.positions){context.beginPath();let first=true;for(const position of event.positions){const pixel=geoToPixel(position.lat,position.lon);if(!pixel)continue;if(first){context.moveTo(pixel.x,pixel.y);first=false;}else context.lineTo(pixel.x,pixel.y);}context.strokeStyle='#7b3294';context.lineWidth=2/state.scale;context.stroke();}
     const p=geoToPixel(event.lat,event.lon)
     if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.y<0||p.x>state.width||p.y>state.height)continue
     const size=9/state.scale
@@ -1802,12 +1819,12 @@ mountMapContext({canvas:overlay,toGeo:event=>{const p=canvasPoint(event);return 
 const chartExportButton=document.createElement('button');chartExportButton.className='button';chartExportButton.id='exportChartPdf';chartExportButton.textContent='Exportera kartvy till PDF';document.querySelector('.journal-panel').append(chartExportButton);
 chartExportButton.onclick=()=>{
  if(!state.transform||annotationEditor.file){toast('Öppna en kalibrerad karta och avsluta manusredigeringen först.');return;}
- const dialog=document.createElement('dialog');dialog.className='journal-dialog';dialog.innerHTML='<form><h2>Exportera kartvy till PDF</h2><p>Aktuell kartbild och synliga spår exporteras. Sparade observationer inom bilden numreras och får en förteckning. Slå på önskade spår och kartunderlag innan export.</p><label>Rubrik<input name="title" value="Mätkarta" maxlength="100" required></label><label><input type="checkbox" name="background" checked>Kartbakgrund</label><label><input type="checkbox" name="points" checked>Mätpunkter</label><label><input type="checkbox" name="depths" checked>Djupsiffror</label><label><input type="checkbox" name="observations" checked>Observationer och förteckning</label><p>Valda delar blir separata, av/på-valbara PDF-lager. Lagerpanelen kräver en PDF-läsare med lagerstöd. Täta djupsiffror glesas ut för läsbarhet.</p><p role="status"></p><button type="submit">Spara PDF</button> <button type="button" data-cancel>Avbryt</button></form>';
+ const dialog=document.createElement('dialog');dialog.className='journal-dialog';dialog.innerHTML='<form><h2>Exportera kartvy till PDF</h2><p>Aktuell kartbild och synliga spår exporteras. Sparade observationer inom bilden numreras och får en förteckning. Slå på önskade spår och kartunderlag innan export.</p><label>Rubrik<input name="title" value="Mätkarta" maxlength="100" required></label><label><input type="checkbox" name="background" checked>Kartbakgrund</label><label><input type="checkbox" name="points" checked>Mätpunkter</label><label><input type="checkbox" name="depths" checked>Djupsiffror</label><label><input type="checkbox" name="boxes" checked>Djup i fyrkanter (Jonas)</label><label><input type="checkbox" name="observations" checked>Observationer och förteckning</label><p>Valda delar blir separata, av/på-valbara PDF-lager. Lagerpanelen kräver en PDF-läsare med lagerstöd. Täta djupsiffror glesas ut för läsbarhet.</p><p role="status"></p><button type="submit">Spara PDF</button> <button type="button" data-cancel>Avbryt</button></form>';
  document.body.append(dialog);dialog.showModal();let busy=false;dialog.oncancel=e=>{if(busy)e.preventDefault();};dialog.onclose=()=>dialog.remove();dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
  dialog.querySelector('form').onsubmit=async event=>{
   event.preventDefault();if(busy)return;busy=true;const form=event.target,feedback=dialog.querySelector('[role=status]');dialog.querySelectorAll('button,input').forEach(el=>el.disabled=true);feedback.textContent='Skapar PDF…';
   try{
-   const layers=Object.fromEntries(['background','points','depths','observations'].map(k=>[k,form.elements[k].checked]));if(!Object.values(layers).some(Boolean))throw new Error('Välj minst ett lager.');
+   const layers=Object.fromEntries(['background','points','depths','observations','boxes'].map(k=>[k,form.elements[k].checked]));if(!Object.values(layers).some(Boolean))throw new Error('Välj minst ett lager.');
    const data=await window.sjomatning.journalList();
    const inside=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.y>=0&&p.x<=state.width&&p.y<=state.height;
    const logs=state.logs.filter(log=>log.visible),points=[];
@@ -1815,9 +1832,26 @@ chartExportButton.onclick=()=>{
    if(points.length>100000)throw new Error('För många punkter för PDF. Zooma in eller öka spårens gallring.');
    const width=state.width,height=state.height,png=layers.background?pdfCanvas.toDataURL('image/png'):null;
    const observations=[],rows=[];
-   if(layers.observations)for(const row of data.rows){if(row.deleted||row.event.lat==null)continue;const p=geoToPixel(row.event.lat,row.event.lon);if(p&&p.x>=0&&p.y>=0&&p.x<=width&&p.y<=height){rows.push(row);observations.push({...p,id:row.event.id,depth:observationDepth(row.event)});}}
-   const result=await window.sjomatning.exportChartPdf({title:form.elements.title.value,width,height,png,points,rows,observations,layers,tracks:logs.map(log=>log.name+': '+depthExplanation(log)),attribution:state.map?'© OpenStreetMap contributors, OpenSeaMap':(state.library.pdfs.find(f=>f.id===state.activePdfId)?.name||'Lokalt fältmanus')});
+   if(layers.observations)for(const row of data.rows){if(row.deleted||row.event.lat==null)continue;const p=geoToPixel(row.event.lat,row.event.lon);if(p&&p.x>=0&&p.y>=0&&p.x<=width&&p.y<=height){rows.push(row);observations.push({...p,id:row.event.id,depth:observationDepth(row.event),path:row.event.positions?.map(v=>geoToPixel(v.lat,v.lon))});}}
+   const boxes=layers.boxes?chartDepthBoxes(data.rows):[];
+   const result=await window.sjomatning.exportChartPdf({boxes,title:form.elements.title.value,width,height,png,points,rows,observations,layers,tracks:logs.map(log=>log.name+': '+depthExplanation(log)),attribution:state.map?'© OpenStreetMap contributors, OpenSeaMap':(state.library.pdfs.find(f=>f.id===state.activePdfId)?.name||'Lokalt fältmanus')});
    if(result){dialog.close();toast('Kart-PDF är sparad.');}else feedback.textContent='Exporten avbröts.';
   }catch(error){feedback.textContent=error.message;}finally{busy=false;dialog.querySelectorAll('button,input').forEach(el=>el.disabled=false);}
  };
 };
+
+function chartDepthBoxes(rows){
+ const charts=state.map?(showManuscripts?state.library.pdfs.filter(f=>f.jonas&&f.hasGeoData):[]):state.jonas?[{jonas:state.jonas,depthBoxes:state.depthBoxes}]:[];
+ const result=[];
+ for(const chart of charts){
+  if(!chart.depthBoxes){if(chart.mapRasterLoading)throw new Error('Kartunderlaget laddas fortfarande. Prova exporten igen strax.');continue;}
+  const samples=[];
+  for(const log of state.logs.filter(l=>l.visible))for(const point of jonasTrackPoints(log)){if(!Number.isFinite(point.depth))continue;const p=chart.jonas.project(point.lat,point.lon);if(p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1)samples.push({...p,depth:correctedDepth(log,point),method:point.method});}
+  for(const row of rows){const event=row.event;if(row.deleted||event.depth==null||event.lat==null)continue;const p=chart.jonas.project(event.lat,event.lon);samples.push({...p,depth:observationDepth(event),method:event.method});}
+  for(const box of fillDepthBoxes(chart.depthBoxes,samples)){
+   const corners=[[box.x,box.y],[box.x+box.w,box.y],[box.x+box.w,box.y+box.h],[box.x,box.y+box.h]].map(([x,y])=>{const g=chart.jonas.geometry(x,y);return geoToPixel(g.lat,g.lon)});
+   if(corners.every(p=>p&&p.x>=0&&p.y>=0&&p.x<=state.width&&p.y<=state.height))result.push({...box,corners});
+  }
+ }
+ return result;
+}

@@ -159,6 +159,27 @@ app.whenReady().then(async()=>{
   await run(`window.exportBlob=null;document.querySelector('#exportChartPdf').click()`);await wait(`!!document.querySelector('[name=background]')`);
   await run(`document.querySelector('[name=background]').form.elements.title.value='Karta ╠ Åäö';document.querySelector('[name=background]').form.requestSubmit()`);await wait(`!!window.exportBlob && !document.querySelector('[name=background]')`);assert.ok(await run(`window.exportBlob.size>1000`));
   console.log('PASS: layered chart PDF export through desktop and browser adapters.');
+  const obsFixture={format:'KodObservationFile',version:1,date:'2025-09-01',vessel:'Scilla',area:'Roxen',water_level_m:33.2,extra:'bevara',observations:[{type:'mooring',points:[{latitude:'58 30.000',longitude:'15 42.000'},{latitude:'58 30.100',longitude:'15 42.100'}],comment:'OBS-provbrygga'}]};
+  await run(`HTMLInputElement.prototype.click=function(){if(this.type==='file'){const dt=new DataTransfer();dt.items.add(new File([${JSON.stringify(JSON.stringify(obsFixture))}],'Kompatibilitetsprov.obs'));this.files=dt.files;this.dispatchEvent(new Event('change'));}};[...document.querySelectorAll('.journal-panel button')].find(b=>b.textContent==='Importera OBS').click()`);
+  await wait(`document.querySelector('.journal-panel').textContent.includes('1 observationer importerade')`);
+  await run(`document.querySelector('[data-open]').click()`);await wait(`!document.querySelector('[name=text]').disabled`);
+  await run(`[...document.querySelectorAll('.journal-entry')].find(e=>e.textContent.includes('OBS-provbrygga')).querySelector('button').click()`);
+  assert.equal(await run(`document.querySelector('[name=occurredAt]').type`),'date');assert.equal(await run(`document.querySelector('[name=positions]').value.split(String.fromCharCode(10)).length`),2);
+  await run(`document.querySelector('[name=text]').value='Redigerad OBS-provbrygga';document.querySelector('[data-editor]').requestSubmit()`);await wait(`document.querySelector('[data-status]').textContent.includes('sparad på webben')`);
+  await run(`document.querySelector('[data-close]').click();[...document.querySelectorAll('.journal-panel button')].find(b=>b.textContent==='Exportera OBS').click()`);
+  await wait(`!!document.querySelector('dialog[open] select')`);
+  await run(`window.exportBlob=null;const s=document.querySelector('dialog[open] select');s.value=[...s.options].find(o=>o.textContent.includes('Kompatibilitetsprov')).value;s.form.requestSubmit()`);await wait(`!!window.exportBlob`);
+  const exportedObs=JSON.parse(await run(`window.exportBlob.text()`));assert.equal(exportedObs.extra,'bevara');assert.equal(exportedObs.observations[0].points.length,2);assert.equal(exportedObs.observations[0].comment,'Redigerad OBS-provbrygga');assert.ok(!exportedObs.observations[0].sjomatning);
+  console.log('PASS: OBS file picker import, date-only editing, mooring and round-trip download.');
+  const pdfDoc=await require('pdf-lib').PDFDocument.create();pdfDoc.addPage([300,200]);pdfDoc.addPage([300,200]);
+  const calibration={format:'roxenkortet.chart',schema_version:1,page_index_base:0,coordinate_systems:{gps:{datum:'WGS84',unit:'decimal_degrees'},pdf:{space:'pymupdf_unrotated',unit:'point',points_per_inch:72,origin:'top_left',x_direction:'right',y_direction:'down'}},pages:[0,1].map(page_index=>({page_index,keep_out_rectangles:[],calibration_points:[{id:'A',lat:59,lon:15,x:0,y:0},{id:'B',lat:59,lon:16,x:300,y:0},{id:'C',lat:58,lon:15,x:0,y:200},{id:'D',lat:58,lon:16,x:300,y:200}]}))};
+  await pdfDoc.attach(Buffer.from(JSON.stringify(calibration)),'chart_metadata.json');
+  await run(`(async()=>{const m=await import('/src/renderer.js');await m.addLibraryFiles([{id:'jonas-ui-test',name:'Jonas-test.pdf',bytes:Uint8Array.from(${JSON.stringify([...await pdfDoc.save()])})}]);})()`);
+  await run(`document.querySelector('[data-open-pdf]').click()`);await wait(`document.querySelector('#manuscriptPage')?.options.length===2`);
+  await run(`const select=document.querySelector('#manuscriptPage');select.value='2';select.dispatchEvent(new Event('change'))`);await wait(`document.querySelector('#pageInfo').textContent.includes('2 av 2')`);
+  assert.equal(await run(`(async()=>{const m=await import('/src/renderer.js');return !!m.state.jonas&&m.state.pageNumber===2})()`),true);
+  console.log('PASS: embedded Jonas calibration and multi-page chart navigation in browser.');
+
  }finally{server.close();}
  app.quit();
 }).catch(error=>{console.error(error);app.exit(1)});

@@ -40,20 +40,25 @@ export function parseTextTrack(text, name) {
 
 export function parseTrcTrack(bytes, name) {
   const recordSize = 30
-  if (bytes.byteLength < recordSize || bytes.byteLength % recordSize !== 0) throw new Error(`${name} har ett okänt TRC-format.`)
+  if (bytes.byteLength < recordSize) throw new Error(`${name} har ett okänt TRC-format.`)
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const { date, waterLevel, correction } = metadataFromName(name)
   const points = []
   const warnings = []
-  for (let offset = 0, index = 0; offset < bytes.byteLength; offset += recordSize, index += 1) {
+  if(bytes.byteLength%recordSize)warnings.push('Avkortad slutpost i TRC-filen.');
+  for (let offset = 0, index = 0; offset+recordSize <= bytes.byteLength; offset += recordSize, index += 1) {
     const lat = view.getInt32(offset, true) / 60000
     const lon = view.getInt32(offset + 4, true) / 60000
     const depth = view.getUint16(offset + 28, true) / 10
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) { warnings.push(index + 1); continue }
-    points.push({ date, time: '', lat, lon, coordinateDecimals: 5, speed: 0, depth })
+    const exponent=view.getUint8(offset+14),last=view.getUint8(offset+19);
+    let mantissa=last&127;for(let i=18;i>=15;i--)mantissa=mantissa*256+view.getUint8(offset+i);
+    const speed=exponent===0?0:(last&128?-1:1)*(1+mantissa/2**39)*2**(exponent-129);
+    const days=view.getFloat64(offset+20,true),stamp=days>1&&days<2958465?new Date(Date.UTC(1899,11,30)+Math.round(days*86400000)):null;
+    points.push({ date:stamp?stamp.toISOString().slice(0,10):date, time:stamp?stamp.toISOString().slice(11,23):'', lat, lon, coordinateDecimals: 5, speed:Number.isFinite(speed)?speed:null, depth })
   }
   if (!points.length) throw new Error(`${name} innehåller inga giltiga mätpunkter.`)
-  return { name, points, warnings, waterLevel, correction }
+  return { name, points, warnings, waterLevel, correction, sourceFormat:'trc' }
 }
 
 // Lowrance SL2/SL3 frame layouts documented by opensounder:
